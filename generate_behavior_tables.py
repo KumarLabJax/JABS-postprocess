@@ -1,11 +1,13 @@
 import pandas as pd
 import numpy as np
-import os
+import os, sys
 import glob
 import re
 import argparse
 import h5py
 from datetime import datetime
+import scipy
+import globalflow as gflow
 
 BEHAVIOR_CLASSIFY_VERSION = 1
 
@@ -47,6 +49,7 @@ def filter_data(starts, durations, values, max_gap_size: int, value_to_remove: i
 
 # Reads in a single file and returns a dataframe of events
 # Note that we carry forward the "pose missing" and "not behavior" events alongside the "behavior" events
+# TODO: Add in filtering
 def parse_predictions(pred_file: os.path, threshold: float=0.5):
 	# Read in the raw data
 	with h5py.File(pred_file, 'r') as f:
@@ -131,7 +134,9 @@ def read_experiment_folder(folder: os.path, behavior: str):
 		predictions['video_name'] = video_name
 		all_predictions.append(predictions)
 	all_predictions = pd.concat(all_predictions).reset_index(drop=True)
-	# TODO Attempt to link the identities
+	# Correct for identities across videos
+	linking_dict = link_identities(folder)
+	all_predictions['longterm_idx'] = [linking_dict[x][y] if x in linking_dict.keys() and y in linking_dict[x].keys() else -1 for x,y in zip(all_predictions['video_name'].values, all_predictions['animal_idx'])]
 	return all_predictions
 
 # Transforms raw data per-experiment into binned results
@@ -141,8 +146,95 @@ def generate_binned_results(df: pd.DataFrame, bin_size_frames: int=108000):
 # Generates a dictionary of dictionaries to link identities between files
 # First layer of dictionaries is the file being translated
 # Second layer of dictionaries contains the key of input identity and the value of the identity linked across files
-def link_identities(folder: os.path, max_dist: float):
-	raise NotImplementedError
+def link_identities(folder: os.path, check_model: bool=False):
+	files_in_experiment = sorted(glob.glob(folder + '/*_pose_est_v[2-5].h5'))
+	vid_names = [re.sub('.*/([^/]*)_pose_est_v.*', '\\1', x) for x in files_in_experiment]
+	# Read in all the center data
+	center_locations = []
+	identified_model = None
+	for cur_file in files_in_experiment:
+		cur_centers, cur_model = read_pose_ids(cur_file)
+		# Check that new data conforms to the name of the previous model
+		if identified_model is None:
+			identified_model = cur_model
+		elif check_model:
+			assert identified_model == cur_model
+		# Transform the data into a better format for indexing
+		cur_centers = pd.DataFrame({'file':cur_file, 'id':np.arange(len(cur_centers)), 'centers':[x for x in cur_centers]})
+		center_locations.append(cur_centers)
+	# center_locations = pd.concat(center_locations)
+	center_data = [[observation['centers'] for cur_index, observation in cur_vid.iterrows()] for cur_vid in center_locations]
+	# Definition for cost of matching
+	class GraphCosts(gflow.StandardGraphCosts):
+		def __init__(self) -> None:
+			super().__init__(
+				penter=1e-3, pexit=1e-3, beta=0.05, max_obs_time=len(center_data) - 1
+			)
+		def transition_cost(self, x: gflow.FlowNode, y: gflow.FlowNode) -> float:
+			tdiff = y.time_index - x.time_index
+			# We can just log transform the cosine distances
+			# Cosine distance should be from range 0-1
+			# We also add 0.1 in between videos to penalize not excluding centers from a video
+			# Finally, we add log(0.1) to get a good balance with enter/exits
+			logprob = np.log(scipy.spatial.distance.cdist([x.obs], [y.obs], metric='cosine') + 0.1 * tdiff) + np.log(0.1)
+			return logprob
+	# Build and solve the graph
+	flowgraph = gflow.build_flow_graph(center_data, GraphCosts())
+	flowdict, ll, num_traj = gflow.solve(flowgraph)
+	# Extract the tracks out of the dict
+	track_starts = [key for key, val in flowdict['S'].items() if val == 1]
+	tracklets = []
+	for tracklet_idx, start in enumerate(track_starts):
+		# Seed first values
+		cur_node = start
+		# Format is [global_id, vid_idx, id_in_vid]
+		cur_tracklet = [[tracklet_idx, cur_node.time_index, cur_node.obs_index]]
+		next_nodes = flowdict[cur_node]
+		# Continue until terminated
+		while 1 in next_nodes.values():
+			next_node_idx = np.argmax(list(next_nodes.values()))
+			cur_node = list(next_nodes.keys())[next_node_idx]
+			if cur_node == 'T':
+				break
+			next_nodes = flowdict[cur_node]
+			# Since the graph has v and u per observation, only add u
+			if cur_node.tag == 'u':
+				cur_tracklet.append([tracklet_idx, cur_node.time_index, cur_node.obs_index])
+		tracklets.append(cur_tracklet)
+	# Re-format into the dict of dicts for easier translation
+	tracklets = np.concatenate(tracklets)
+	vid_dict = {}
+	for i, vid_name in enumerate(vid_names):
+		matches_to_add = tracklets[:,1] == i
+		if np.any(matches_to_add):
+			vid_dict[vid_name] = dict(zip(tracklets[matches_to_add,0], tracklets[matches_to_add,2]))
+	return vid_dict
+
+# Helper function for reading a pose files identity data
+def read_pose_ids(pose_file: os.path):
+	pose_v = int(re.sub('.*_pose_est_v([2-5]).*', '\\1', pose_file))
+	if pose_v == 2:
+		raise NotImplementedError('Single mouse pose doesn\'t run on longterm experiments.')
+	# No longterm IDs exist, provide a default value of the correct shape
+	elif pose_v == 3:
+		with h5py.File(pose_file, 'r') as f:
+			num_mice = np.max()
+			centers = np.zeros([num_mice, 0], dtype=np.float64)
+			model_used = 'None'
+		# Linking identities across multiple files does not yet support this, so throw an error here
+		raise NotImplementedError('Pose v3 identities cannot be linked across videos.')
+	elif pose_v >= 4:
+		with h5py.File(pose_file, 'r') as f:
+			centers = f['poseest/instance_id_center'][:]
+			model_used = f['poseest/identity_embeds'].attrs['network']
+	return centers, model_used
+
+# Matches a pair of IDs using the cosine distance
+# Pairs ids using a hungarian matching algorithm (lowest total cost)
+def hungarian_match_ids(group1, group2):
+	dist_mat = scipy.spatial.distance.cdist(group1, group2, metric='cosine')
+	row_best, col_best = scipy.optimize.linear_sum_assignment(dist_mat)
+	return row_best, col_best
 
 # Writes the header of filers used in this script to file
 def write_experiment_header(out_file: os.path, args):
@@ -164,10 +256,11 @@ def generate_behavior_tables(args, behavior: str):
 		all_experiment_data.append(experiment_data)
 	# Merge experiments into a single project (RLE format)
 	all_experiment_data = pd.concat(all_experiment_data)
+	# TODO:
 	# Write project bout output
-
 	# Convert project into binned data
 	# Write binned project output
+	return all_experiment_data
 
 def main(argv):
 	parser = argparse.ArgumentParser(description='Script that transforms JABS behavior predictions for a project folder into an easier to work with set of files.')
@@ -185,13 +278,9 @@ def main(argv):
 	else:
 		behaviors = list(args.behavior)
 	# Loop through all behaviors:
+	print('Generating behavior tables for behaviors: ' + ', '.join(behaviors) + ' in ' + args.project_folder + '...')
 	for behavior in behaviors:
-		generate_behavior_tables(args, behavior)
+		cur_table = generate_behavior_tables(args, behavior)
 
 if __name__  == '__main__':
 	main(sys.argv[1:])
-
-
-from types import SimpleNamespace
-
-args = SimpleNamespace(project_folder='/media/bgeuther/Storage/TempStorage/test-behavior-project/', stitch_gap=5, min_bout_length=5, out_bin_size=60, behavior=None, out_prefix=None)

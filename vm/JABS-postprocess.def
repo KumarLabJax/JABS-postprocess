@@ -1,0 +1,29 @@
+Bootstrap: docker
+From: python:3.9-slim-bullseye
+
+
+%setup
+	mkdir -p ${SINGULARITY_ROOTFS}/JABS-postprocess
+
+%files
+	# Code
+	../../JABS-postprocess /JABS-postprocess
+
+%post
+	pip install --upgrade pip
+	pip install --upgrade numpy pandas imageio imageio-ffmpeg h5py opencv-python plotnine scipy
+	# Video codecs
+	apt-get update && apt-get install -y ffmpeg python3-tk coreutils
+	# OpenCV requirement
+	apt-get install -y libsm6
+	# GUI
+	apt-get install -y qtbase5-dev libglu1-mesa-dev libgl1-mesa-glx libxcb-util1 libvtk6-dev
+	# Graph flow for linking identities
+	apt-get install -y git
+	pip install git+https://github.com/cheind/py-globalflow
+
+
+# %runscript
+# 	/bin/bash /pipeline/docker/infer-identity.sh $@
+
+
