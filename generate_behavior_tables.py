@@ -28,11 +28,15 @@ def rle(inarray):
 
 # Removes states of RLE data based on filters
 # Returns a new tuple of RLE data
-def filter_data(starts, durations, values, max_gap_size: int, value_to_remove: int = 0):
-	gaps_to_remove = np.logical_and(values==value_to_remove, durations<max_gap_size)
+# Note that although this supports removing a list of different values, it may not operate as intended and is safer to sequentially delete ones from the list
+# Risky behavior is when multiple short bouts alternate between values that are all going to be removed
+# Current behavior is to remove all of those bouts, despite the sum duration being a lot longer that the max_gap_size
+# Recommended usage: Only remove one value at a time. For 2 values to remove, this will remove at most 1.5x the max_gap size
+def filter_data(starts, durations, values, max_gap_size: int, values_to_remove: list[int] = [0]):
+	gaps_to_remove = np.logical_and(np.isin(values, values_to_remove), durations<max_gap_size)
 	new_durations = np.copy(durations)
 	new_starts = np.copy(starts)
-	new_states = np.copy(values)
+	new_values = np.copy(values)
 	if np.any(gaps_to_remove):
 		# Go through backwards removing gaps
 		for cur_gap in np.where(gaps_to_remove)[0][::-1]:
@@ -40,17 +44,37 @@ def filter_data(starts, durations, values, max_gap_size: int, value_to_remove: i
 			if cur_gap == 0 or cur_gap == len(new_durations)-1:
 				pass
 			else:
-				cur_duration = np.sum(new_durations[cur_gap-1:cur_gap+2])
-				new_durations[cur_gap-1] = cur_duration
-				new_durations = np.delete(new_durations, [cur_gap, cur_gap+1])
-				new_starts = np.delete(new_starts, [cur_gap, cur_gap+1])
-				new_states = np.delete(new_states, [cur_gap, cur_gap+1])
-	return new_starts, new_durations, new_states
+				# Delete gaps where the borders match
+				if new_values[cur_gap-1] == new_values[cur_gap+1]:
+					# Adjust surrounding data
+					cur_duration = np.sum(new_durations[cur_gap-1:cur_gap+2])
+					new_durations[cur_gap-1] = cur_duration
+					# Since the border bouts merged, delete the gap and the 2nd bout
+					new_durations = np.delete(new_durations, [cur_gap, cur_gap+1])
+					new_starts = np.delete(new_starts, [cur_gap, cur_gap+1])
+					new_values = np.delete(new_values, [cur_gap, cur_gap+1])
+				# Delete gaps where the borders don't match by dividing the block in half
+				else:
+					# Adjust surrounding data
+					# To remove rounding issues, round down for left, up for right
+					duration_deleted = new_durations[cur_gap]
+					# Previous bout gets longer
+					new_durations[cur_gap-1] = new_durations[cur_gap-1] + int(np.floor(duration_deleted/2))
+					# Next bout also needs start time adjusted
+					new_durations[cur_gap+1] = new_durations[cur_gap+1] + int(np.ceil(duration_deleted/2))
+					new_starts[cur_gap+1] = new_starts[cur_gap+1] + int(np.floor(duration_deleted/2))
+					# Delete out the gap
+					new_durations = np.delete(new_durations, [cur_gap])
+					new_starts = np.delete(new_starts, [cur_gap])
+					new_values = np.delete(new_values, [cur_gap])
+	return new_starts, new_durations, new_values
 
 # Reads in a single file and returns a dataframe of events
+# threshold should only be adjusted if you know what you're doing (most ML classifiers expect to be using a 0.5 threshold)
+# stitch_bouts is the length of a gap to merge
+# filter_bouts is the minimum length of a bout to keep
 # Note that we carry forward the "pose missing" and "not behavior" events alongside the "behavior" events
-# TODO: Add in filtering
-def parse_predictions(pred_file: os.path, threshold: float=0.5):
+def parse_predictions(pred_file: os.path, threshold: float=0.5, interpolate_size: int=0, stitch_bouts: int=0, filter_bouts: int=0):
 	# Read in the raw data
 	with h5py.File(pred_file, 'r') as f:
 		data = f['predictions/predicted_class'][:]
@@ -65,6 +89,15 @@ def parse_predictions(pred_file: os.path, threshold: float=0.5):
 	rle_data = []
 	for idx in np.arange(len(data)):
 		cur_starts, cur_durations, cur_values = rle(data[idx])
+		# Interpolate missing data first
+		if interpolate_size > 0:
+			cur_starts, cur_durations, cur_values = filter_data(cur_starts, cur_durations, cur_values, max_gap_size=interpolate_size, values_to_remove=[-1])
+		# Filter out short gaps next
+		if stitch_bouts > 0:
+			cur_starts, cur_durations, cur_values = filter_data(cur_starts, cur_durations, cur_values, max_gap_size=stitch_bouts, values_to_remove=[0])
+		# Filter out short predictions last
+		if filter_bouts > 0:
+			cur_starts, cur_durations, cur_values = filter_data(cur_starts, cur_durations, cur_values, max_gap_size=filter_bouts, values_to_remove=[1])
 		tmp_df = pd.DataFrame({'animal_idx':idx, 'start':cur_starts, 'duration':cur_durations, 'is_behavior':cur_values})
 		rle_data.append(tmp_df)
 	rle_data = pd.concat(rle_data).reset_index(drop=True)
@@ -110,7 +143,7 @@ def get_behaviors_in_folder(folder: os.path):
 	return behaviors
 
 # Reads in a collection of files related to an experiment in a folder
-def read_experiment_folder(folder: os.path, behavior: str):
+def read_experiment_folder(folder: os.path, behavior: str, interpolate_size: int, stitch_bouts: int, filter_bouts: int):
 	# Figure out what pose files exist
 	files_in_experiment = sorted(glob.glob(folder + '/*_pose_est_v[2-5].h5'))
 	all_predictions = []
@@ -125,7 +158,7 @@ def read_experiment_folder(folder: os.path, behavior: str):
 		# Check if there are behavior predictions and read in data appropriately
 		prediction_file = re.sub('_pose_est_v[2-5].h5', '_behavior/v1/' + behavior + '/' + video_name + '.h5', cur_file)
 		if os.path.exists(prediction_file):
-			predictions = parse_predictions(prediction_file)
+			predictions = parse_predictions(prediction_file, interpolate_size=interpolate_size, stitch_bouts=stitch_bouts, filter_bouts=filter_bouts)
 		else:
 			predictions = make_no_predictions(cur_file)
 		# Toss data into the full matrix
@@ -157,9 +190,7 @@ def get_results(x):
 	y['time_no_pred'] = [np.sum(x['behavior']==-1)]
 	y['time_not_behavior'] = [np.sum(x['behavior']==0)]
 	y['time_behavior'] = [np.sum(x['behavior']==1)]
-	# bout_no_pred = [np.sum(x['bout']==-1)]
-	# bout_not_behavior = [np.sum(x['bout']==0)]
-	y['bout_behavior'] = [np.sum(x['bout']==1)]
+	y['bout_behavior'] = [np.sum(x['bout'])]
 	return y
 
 # Moves clock to the next hour
@@ -280,7 +311,7 @@ def hungarian_match_ids(group1, group2):
 
 # Writes the header of filers used in this script to file
 def write_experiment_header(out_file: os.path, args, behavior):
-	header_df = pd.DataFrame({'Project Folder': [args.project_folder], 'Behavior': [behavior], 'Stitch Gap': [args.stitch_gap], 'Min Bout Length': [args.min_bout_length], 'Out Bin Size': [args.out_bin_size]})
+	header_df = pd.DataFrame({'Project Folder': [args.project_folder], 'Behavior': [behavior], 'Interpolate Size':[args.interpolate_size], 'Stitch Gap': [args.stitch_gap], 'Min Bout Length': [args.min_bout_length], 'Out Bin Size': [args.out_bin_size]})
 	if os.path.exists(out_file) and not args.overwrite:
 		raise FileExistsError('Out_file ' + str(out_file) + ' exists. Please use --overwrite if you wish to overwrite data.')
 	else:
@@ -308,7 +339,7 @@ def generate_behavior_tables(args, behavior: str):
 	# Read in all the experiments (RLE format)
 	experiment_bout_data = []
 	for cur_experiment in exp_folders:
-		experiment_data = read_experiment_folder(cur_experiment, behavior)
+		experiment_data = read_experiment_folder(cur_experiment, behavior, interpolate_size = args.interpolate_size, stitch_bouts = args.stitch_gap, filter_bouts = args.min_bout_length)
 		experiment_bout_data.append(experiment_data)
 	# Merge experiments into a single project (RLE format)
 	experiment_bout_data = pd.concat(experiment_bout_data)
@@ -323,6 +354,7 @@ def generate_behavior_tables(args, behavior: str):
 def main(argv):
 	parser = argparse.ArgumentParser(description='Script that transforms JABS behavior predictions for a project folder into an easier to work with set of files.')
 	parser.add_argument('--project_folder', help='Folder that contains the project with both pose files and behavior prediction files', required=True)
+	parser.add_argument('--interpolate_size', help='Maximum number of frames in which missing data will be interpolated, default=5', default=5, type=int)
 	parser.add_argument('--stitch_gap', help='Number of frames in which frames sequential behavior prediction bouts will be joined, default=5', default=5, type=int)
 	parser.add_argument('--min_bout_length', help='Minimum number of frames in which a behavior prediction must be to be considered, default=5', default=5, type=int)
 	parser.add_argument('--out_bin_size', help='Time duration used in binning the results, default=60', default=60, type=int)
