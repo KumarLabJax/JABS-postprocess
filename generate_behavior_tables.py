@@ -298,8 +298,8 @@ def write_experiment_data(args, behavior, bout_table, suffix=None):
 		# Write the data
 		with open(out_file, 'a') as f:
 			bout_table.to_csv(f, header=True, index=False)
-	except FileExistsError:
-		pass
+	except FileExistsError as e:
+		print(e)
 
 # Generates the 2 prediction tables given an experiment
 def generate_behavior_tables(args, behavior: str):
@@ -313,11 +313,11 @@ def generate_behavior_tables(args, behavior: str):
 	# Merge experiments into a single project (RLE format)
 	experiment_bout_data = pd.concat(experiment_bout_data)
 	# Write project bout output
-	write_experiment_data(args, behavior, experiment_bout_data, suffix='_bouts')
+	write_experiment_data(args, behavior, experiment_bout_data, suffix='_' + behavior + '_bouts')
 	# Convert project into binned data
 	experiment_bin_data = generate_binned_results(experiment_bout_data, args.out_bin_size)
 	# Write binned project output
-	write_experiment_data(args, behavior, experiment_bin_data, suffix='_summaries')
+	write_experiment_data(args, behavior, experiment_bin_data, suffix='_' + behavior + '_summaries')
 	return experiment_bout_data
 
 def main(argv):
