@@ -17,7 +17,7 @@ df['time'] = pd.to_datetime(df['level_0'])
 	p9.facet_wrap('exp_prefix', scales='free_x')+
 	p9.theme_bw()+
 	p9.theme(axis_text_x=p9.element_text(rotation=90, hjust=0.5))+
-	p9.labs(title=header_data['Behavior'][0])
+	p9.labs(title=header_data['Behavior'][0], color='Identity')
 ).draw().show()
 
 # Read in the bout results
@@ -32,7 +32,7 @@ df_bouts['time_end'] = df_bouts['time'] + pd.to_timedelta(df_bouts['start']/fram
 # Plot the bouts (behavior, not behavior, and missing data)
 (
 	p9.ggplot(df_bouts)+
-	p9.geom_rect(p9.aes(xmin='time_start', xmax='time_end', ymin='longterm_idx', ymax='longterm_idx + 1', fill='factor(is_behavior)'))+
+	p9.geom_rect(p9.aes(xmin='time_start', xmax='time_end', ymin='longterm_idx - 0.5', ymax='longterm_idx + 0.5', fill='factor(is_behavior)'))+
 	p9.scale_x_datetime(breaks=mizani.breaks.date_breaks('6 hour'), labels=mizani.formatters.date_format('%Y-%m-%d %H-%M-%S'))+
 	p9.scale_fill_discrete(labels=['No Mouse', 'Not Behavior', 'Behavior'])+
 	p9.facet_wrap('exp_prefix', scales='free_x')+
