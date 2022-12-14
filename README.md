@@ -52,11 +52,8 @@ The bout table contains a compressed RLE encoded format for each bout (post-filt
 * `time` : Formatted time string in "%Y-%m-%d %H:%M:%S" of the time this bout was extracted from
 * `video_name` : Name of the video this bout was extracted from
 * `start` : Start in frame of the bout
-* 
 * `duration` : Duration of the bout in frames
-* 
 * `is_behavior` : State of the described bout
-* 
     * `-1` : The mouse did not have a pose to create a prediction
     * `0` : Not behavior prediction
     * `1` : Behavior prediction
