@@ -79,6 +79,9 @@ def parse_predictions(pred_file: os.path, threshold: float=0.5, interpolate_size
 	with h5py.File(pred_file, 'r') as f:
 		data = f['predictions/predicted_class'][:]
 		probability = f['predictions/probabilities'][:]
+	# Early exit if no animals had predictions
+	if np.shape(data)[0] == 0:
+		return pd.DataFrame({'animal_idx':[-1], 'start':[0], 'duration':[0], 'is_behavior':[-1]})
 	# Transform probabilities of binary classifier into those of the behavior
 	probability[data==0] = 1-probability[data==0]
 	# Apply a new threshold
@@ -145,7 +148,7 @@ def get_behaviors_in_folder(folder: os.path):
 # Reads in a collection of files related to an experiment in a folder
 def read_experiment_folder(folder: os.path, behavior: str, interpolate_size: int, stitch_bouts: int, filter_bouts: int):
 	# Figure out what pose files exist
-	files_in_experiment = sorted(glob.glob(folder + '/*_pose_est_v[2-5].h5'))
+	files_in_experiment = sorted(glob.glob(folder + '**/*_pose_est_v[2-5].h5'))
 	all_predictions = []
 	for cur_file in files_in_experiment:
 		# Parse out the video name from the pose file
@@ -220,7 +223,7 @@ def to_vector(event_df: pd.DataFrame):
 # First layer of dictionaries is the file being translated
 # Second layer of dictionaries contains the key of input identity and the value of the identity linked across files
 def link_identities(folder: os.path, check_model: bool=False):
-	files_in_experiment = sorted(glob.glob(folder + '/*_pose_est_v[2-5].h5'))
+	files_in_experiment = sorted(glob.glob(folder + '**/*_pose_est_v[2-5].h5'))
 	vid_names = [re.sub('.*/([^/]*)_pose_est_v.*', '\\1', x) for x in files_in_experiment]
 	# Read in all the center data
 	center_locations = []
