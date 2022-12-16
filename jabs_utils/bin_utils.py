@@ -9,6 +9,7 @@ def generate_binned_results(df: pd.DataFrame, bin_size_minutes: int=60):
 	for cur_group, cur_data in grouped_df:
 		time_data = to_vector(cur_data)
 		binned_results = time_data.groupby(pd.Grouper(freq=str(bin_size_minutes) + 'T'), group_keys=True).apply(get_results).reset_index().drop(columns=['level_1'])
+		binned_results = binned_results.rename(columns={'level_0':'time'})
 		binned_results['exp_prefix'], binned_results['longterm_idx'] = cur_group
 		all_results.append(binned_results)
 	all_results = pd.concat(all_results)
