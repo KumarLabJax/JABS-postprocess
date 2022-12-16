@@ -1,16 +1,29 @@
 # Installation
 
-This code contains a singularity definition file for assistance with installing the python environment.
+This code contains a [singularity definition file](vm/JABS-postprocess.def) for assistance with installing the python environment. This environment supports both generating behavior table files and plotting the data in python.
 
-# Running
+Example building of the singularity image:
 
-Example Call:
+```
+cd vm
+singularity build --fakeroot ../../JABS-Postprocessing.sif JABS-postprocess.def
+```
+
+Optionally, you can also just use `pip3 install -r vm/requirements.txt` with a python environment. Only python3.9 has been tested.
+
+# Generating Behavior Tables
+
+## Multi-Animal Multi-Day Table Generation
 
 ```
 python3 generate_behavior_tables.py --project_folder /path/to/project/folder --out_prefix results
 ```
 
 This will generate 2 behavior table files per behavior detected in the project folder. Optionally, you can include `--behavior BehaviorName` to only generate a behavior table for that one behavior.
+
+## Single Animal OFA Table Generation
+
+This feature is not yet implemented.
 
 ## Notes on Filtering
 
@@ -26,6 +39,10 @@ The order of deletions is:
 1. Missing Predictions
 2. Not Behavior
 3. Behavior
+
+## Data table extensions
+
+Lots of the functions used in generating these behavior tables were designed for potential re-use. Check out the functions inside [jabs_utils](jabs_utils/) if you wish to possibly extend the functionality of the generate behavior scripts.
 
 # Data table format
 
@@ -81,3 +98,5 @@ Summaries included:
 Since the data is in a "long" format, it is generally straight forward to generate plots using ggplot in R or plotnine in python.
 
 Some example code for generating plots is located in [test_plot.py](test_plot.py).
+
+Additionally, there are a variety of helper functions located in [analysis_utils](analysis_utils/) for reading, manipulating, and generating plots of data using the data tables produced.
