@@ -1,0 +1,14 @@
+h5py==3.7.0
+imageio==2.22.4
+imageio-ffmpeg==0.4.7
+matplotlib==3.6.2
+mizani==0.8.1
+numpy==1.23.5
+opencv-python==4.6.0.66
+openpyxl==3.0.10
+pandas==1.5.2
+Pillow==9.3.0
+plotnine==0.10.1
+py-globalflow @ git+https://github.com/cheind/py-globalflow@7c4fec8ea91f69c6b4c699c3941537b978ac1d1d
+scikit-learn==0.24.0
+scipy==1.9.3
