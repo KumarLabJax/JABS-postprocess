@@ -12,17 +12,28 @@ import mizani
 # Generates a plotnine figure (which can be modified after returned)
 # Handles the formatting under the hood
 # If you want to remove the data plotted in favor of something else (eg points), pass draw_data=False
-# TODO: Add in the light cycle blocks based on detected 'lights_on' field
-def generate_time_vs_feature_plot(df: pd.DataFrame, time: str='zt_time_hour', feature: str='rel_time_behavior', factor: str='Strain', draw_data=True):
+def generate_time_vs_feature_plot(df: pd.DataFrame, time: str='zt_time_hour', feature: str='rel_time_behavior', factor: str='Strain', draw_data: bool=True, title: str=None):
+	# Detect the time datatype
 	col_types = df.dtypes
 	df_copy = pd.DataFrame.copy(df)
 	if not pd.api.types.is_categorical_dtype(col_types[factor]):
 		df_copy[factor] = df_copy[factor].astype('category')
+	# Make a custom df for the lights block
+	light_df = df.groupby([time,factor])[[feature,'lights_on']].mean().reset_index()
+	# Max across the factor
+	light_df = light_df.groupby(time)[[feature,'lights_on']].max().reset_index()
+	light_df['lights_val'] = (1-light_df['lights_on'])*1.1*np.max(light_df[feature])
+	if pd.api.types.is_timedelta64_dtype(col_types[time]) or pd.api.types.is_timedelta64_ns_dtype(col_types[time]):
+		light_width = 60*60*10**9
+	else:
+		light_width = 1
 	# Start building the plot
-	plot = p9.ggplot(df, p9.aes(x=time, y=feature, color=factor, fill=factor))
+	plot = p9.ggplot(df)
 	# Add in the line + background
 	if draw_data:
-		plot = plot + p9.stat_summary(fun_ymin=lambda x: np.mean(x)-np.std(x)/np.sqrt(len(x)), fun_ymax=lambda x: np.mean(x)+np.std(x)/np.sqrt(len(x)), fun_y=np.mean, geom=p9.geom_smooth)
+		# Plot the background light rectangles first
+		plot = plot + p9.geom_bar(p9.aes(x=time, y='lights_val'), light_df, width=light_width, stat='identity', fill='lightgrey')
+		plot = plot + p9.stat_summary(p9.aes(x=time, y=feature, color=factor, fill=factor), fun_ymin=lambda x: np.mean(x)-np.std(x)/np.sqrt(len(x)), fun_ymax=lambda x: np.mean(x)+np.std(x)/np.sqrt(len(x)), fun_y=np.mean, geom=p9.geom_smooth)
 	# Clean up some formatting
 	plot = plot + p9.theme_bw()
 	# Try to handle the different types of times
@@ -34,7 +45,10 @@ def generate_time_vs_feature_plot(df: pd.DataFrame, time: str='zt_time_hour', fe
 		plot = plot + p9.theme(axis_text_x=p9.element_text(rotation=90, hjust=0.5)) + p9.scale_x_timedelta(labels=mizani.formatters.timedelta_format('h'))
 		# breaks=mizani.breaks.timedelta_breaks(n_breaks)
 	# 
-	plot = plot + p9.labs(color=factor)
+	if title is not None:
+		plot = plot + p9.labs(title=title, color=factor, y=feature)
+	else:
+		plot = plot + p9.labs(color=factor, y=feature)
 	plot = plot + p9.scale_color_brewer(type='qual', palette='Set1')
 	plot = plot + p9.scale_fill_brewer(type='qual', palette='Set1', guide=False)
 	return plot

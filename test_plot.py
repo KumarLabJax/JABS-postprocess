@@ -1,4 +1,5 @@
 import pandas as pd
+import plotnine as p9
 import re
 import numpy as np
 
@@ -9,9 +10,7 @@ from analysis_utils.plots import generate_time_vs_feature_plot
 # Example multi-day summary plot
 #-------------------------------
 # Read in the summary results
-results_file = '/media/bgeuther/Storage/TempStorage/test-behavior-project/test_results_Approach_summaries.csv'
-# results_file = 'ProjectResults_2022-12-15_Nose_nose_summaries.csv'
-# results_file = 'ProjectResults_2022-12-15_Nose_genital_summaries.csv'
+results_file = '/media/bgeuther/Storage/TempStorage/test-behavior-project/ProjectResults_2022-12-19_Approach_summaries.csv'
 
 jmcrs_data = '~/Downloads/2022-11-16 TOM_TotalQueryForConfluence.xlsx'
 header_data, df = read_ltm_summary_table(results_file, jmcrs_metadata=jmcrs_data)
@@ -20,15 +19,38 @@ header_data, df = read_ltm_summary_table(results_file, jmcrs_metadata=jmcrs_data
 df.keys()
 
 # Plot relative_exp_time vs rel_time_behavior
-generate_time_vs_feature_plot(df, 'relative_exp_time', 'rel_time_behavior').draw().show()
+generate_time_vs_feature_plot(df, 'relative_exp_time', 'rel_time_behavior', title=header_data['Behavior'][0]).draw().show()
 # Collapse the days into one 24-hr cycle and plot number of bouts
-generate_time_vs_feature_plot(df, 'zt_time_hour', 'bout_behavior').draw().show()
+generate_time_vs_feature_plot(df, 'zt_time_hour', 'bout_behavior', title=header_data['Behavior'][0]).draw().show()
 
 # Since the first day normally has acclimation, do the same previous plot removing data before midnight on the first night
-generate_time_vs_feature_plot(filter_experiment_time(df), 'zt_time_hour', 'bout_behavior').draw().show()
+generate_time_vs_feature_plot(filter_experiment_time(df), 'zt_time_hour', 'bout_behavior', title=header_data['Behavior'][0]).draw().show()
+
+# Plot the data by Strain+Room
+df['Strain+Room'] = df['Strain'] + ' ' + df['Room']
+generate_time_vs_feature_plot(filter_experiment_time(df), 'zt_time_hour', 'bout_behavior', 'Strain+Room', title=header_data['Behavior'][0]).draw().show()
 
 # Check the mean of data after first day (midnight)
 filter_experiment_time(df).groupby('Strain').agg({'rel_time_behavior':np.mean})
+
+# Read in more behaviors to make an aggregate graph
+# This is stretching the limits of the function capability. Facets don't work too well. Nonetheless, plot room by behavior predictions
+df['Behavior'] = header_data['Behavior'][0]
+results_file2 = '/media/bgeuther/Storage/TempStorage/test-behavior-project/ProjectResults_2022-12-19_Nose_nose_summaries.csv'
+header_data, df2 = read_ltm_summary_table(results_file2, jmcrs_metadata=jmcrs_data)
+df2['Behavior'] = header_data['Behavior'][0]
+results_file3 = '/media/bgeuther/Storage/TempStorage/test-behavior-project/ProjectResults_2022-12-19_Nose_genital_summaries.csv'
+header_data, df3 = read_ltm_summary_table(results_file3, jmcrs_metadata=jmcrs_data)
+df3['Behavior'] = header_data['Behavior'][0]
+results_file4 = '/media/bgeuther/Storage/TempStorage/test-behavior-project/ProjectResults_2022-12-19_Chase_summaries.csv'
+header_data, df4 = read_ltm_summary_table(results_file4, jmcrs_metadata=jmcrs_data)
+df4['Behavior'] = header_data['Behavior'][0]
+results_file5 = '/media/bgeuther/Storage/TempStorage/test-behavior-project/ProjectResults_2022-12-19_Leave_summaries.csv'
+header_data, df5 = read_ltm_summary_table(results_file5, jmcrs_metadata=jmcrs_data)
+df5['Behavior'] = header_data['Behavior'][0]
+df = pd.concat([df, df2, df3, df4, df5])
+
+(generate_time_vs_feature_plot(df, 'zt_exp_time', 'rel_time_behavior')+p9.facet_grid('Behavior~Room', scales='free_y')).draw().show()
 
 #----------------------
 # Example Ethogram plot

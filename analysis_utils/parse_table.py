@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import os
+import re
 
 # Helper function to read in longterm 
 def read_ltm_summary_table(behavior_table: os.path, jmcrs_metadata: os.path=None, light_cycle: list[int]=[6,18], timezone: str='America/New_York'):
@@ -20,7 +21,9 @@ def read_ltm_summary_table(behavior_table: os.path, jmcrs_metadata: os.path=None
 	# Read in the metadata to add into the main table
 	if jmcrs_metadata is not None:
 		meta_df = pd.read_excel(jmcrs_metadata)
-		meta_df = meta_df[['ExptNumber','Sex','Strain']].drop_duplicates()
+		meta_df = meta_df[['ExptNumber','Sex','Strain','Location']].drop_duplicates()
+		meta_df['Room'] = [x.split(' ')[0] if isinstance(x,str) else ''  for x in meta_df['Location']]
+		meta_df['Computer'] = [re.sub('.*(NV[0-9]+).*','\\1',x) if isinstance(x,str) else ''  for x in meta_df['Location']]
 		# Note: If you want to drop rows that don't have metadata, change how='inner'
 		df = pd.merge(df, meta_df, left_on='exp_prefix', right_on='ExptNumber', how='left')
 	# Since the data coming in has "-1" as predictions not assigned an identity, we should drop them
@@ -56,5 +59,5 @@ def filter_experiment_time(df: pd.DataFrame, time_field: str='zt_exp_time', num_
 		data_to_keep = filter_field >= pd.Timedelta(str(num_hours) + ' hour')
 	else:
 		data_to_keep = filter_field <= pd.Timedelta(str(num_hours) + ' hour')
-	return df[data_to_keep]
+	return df[data_to_keep].reset_index(drop=True)
 
