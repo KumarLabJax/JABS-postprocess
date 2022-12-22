@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import h5py
+import json
 import os
 import re
 from datetime import datetime
@@ -14,12 +15,16 @@ from jabs_utils.bout_utils import rle, filter_data
 # threshold should only be adjusted if you know what you're doing (most ML classifiers expect to be using a 0.5 threshold)
 # stitch_bouts is the length of a gap to merge
 # filter_bouts is the minimum length of a bout to keep
+# trim_time allows the user to read only in a portion of the data (Default of none for reading in all data)
 # Note that we carry forward the "pose missing" and "not behavior" events alongside the "behavior" events
-def parse_predictions(pred_file: os.path, threshold: float=0.5, interpolate_size: int=0, stitch_bouts: int=0, filter_bouts: int=0):
+def parse_predictions(pred_file: os.path, threshold: float=0.5, interpolate_size: int=0, stitch_bouts: int=0, filter_bouts: int=0, trim_time: tuple[int, int]=None):
 	# Read in the raw data
 	with h5py.File(pred_file, 'r') as f:
 		data = f['predictions/predicted_class'][:]
 		probability = f['predictions/probabilities'][:]
+	if trim_time is not None:
+		data = data[:,trim_time[0]:trim_time[1]]
+		probability = probability[:,trim_time[0]:trim_time[1]]
 	# Early exit if no animals had predictions
 	if np.shape(data)[0] == 0:
 		return pd.DataFrame({'animal_idx':[-1], 'start':[0], 'duration':[0], 'is_behavior':[-1]})
@@ -68,6 +73,29 @@ def make_no_predictions(pose_file: os.path):
 	rle_data = pd.concat(rle_data).reset_index(drop=True)
 	return rle_data
 
+# Reads in JABS bout annotation files and places it in the same format as prodiction RLE
+# If no behavior is specified, it will read all behaviors in the file
+def parse_jabs_annotations(file, behavior: str=None):
+	with open(file, 'r') as f:
+		data = json.load(f)
+	vid_name = data['file']
+	df_list = []
+	for animal_idx, labels in data['labels'].items():
+		for cur_behavior, annotations in labels.items():
+			if behavior is None or behavior == cur_behavior:
+				try:
+					# Alternative for only reading in positive annotations
+					#df_list.append(pd.concat([pd.DataFrame({'animal_idx':[animal_idx], 'behavior':[cur_behavior], 'start':[x['start']], 'duration':[x['end']-x['start']+1], 'is_behavior':[1]}) for x in annotations if x['present']]))
+					df_list.append(pd.concat([pd.DataFrame({'animal_idx':[animal_idx], 'behavior':[cur_behavior], 'start':[x['start']], 'duration':[x['end']-x['start']+1], 'is_behavior':[x['present']]}) for x in annotations]))
+				except ValueError:
+					print(cur_behavior + ' for ' + animal_idx + ' contained no positive annotations, skipping.')
+	if len(df_list)>0:
+		df_list = pd.concat(df_list)
+		df_list['video'] = os.path.splitext(vid_name)[0]
+	else:
+		df_list = pd.DataFrame({'animal_idx':[], 'behavior':[], 'start':[], 'duration':[], 'is_behavior':[], 'video':[]})
+	return df_list
+
 # Reads in a collection of files related to an experiment in a folder
 def read_experiment_folder(folder: os.path, behavior: str, interpolate_size: int, stitch_bouts: int, filter_bouts: int):
 	# Figure out what pose files exist
@@ -97,6 +125,16 @@ def read_experiment_folder(folder: os.path, behavior: str, interpolate_size: int
 	linking_dict = link_identities(folder)
 	all_predictions['longterm_idx'] = [linking_dict[x][y] if x in linking_dict.keys() and y in linking_dict[x].keys() else -1 for x,y in zip(all_predictions['video_name'].values, all_predictions['animal_idx'])]
 	return all_predictions
+
+# Reads in all the annotations of a given project folder
+def read_project_annotations(folder: os.path, behavior: str=None):
+	if re.search('rotta/annotations', folder):
+		annotation_folder = folder
+	else:
+		annotation_folder = folder + '/rotta/annotations/'
+	json_files = [x for x in os.listdir(annotation_folder) if os.path.splitext(x)[1] == '.json']
+	jabs_annotations = pd.concat([parse_jabs_annotations(annotation_folder + '/' + x) for x in json_files])
+	return jabs_annotations
 
 # Definition for cost of matching for use in global flow graph identity linking
 class GraphCosts(gflow.StandardGraphCosts):

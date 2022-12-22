@@ -9,6 +9,9 @@ POSE_REGEX_STR = '_pose_est_v[2-5].h5'
 # Assumes that all videos for a multi-day experiment exist in a single folder
 # Assumes that the prediction paths look like 'project/EXPERIMENT_FOLDER/video_behavior/v1/behavior_name/video.h5'
 def get_predictions_in_folder(folder: os.path):
+	# This glob can't use trailing slash
+	if folder[-1] == '/':
+		folder = folder[:-1]
 	# Find all the behavior prediction folders (always named v1)
 	possible_folders = glob.glob(folder + '**/v' + str(BEHAVIOR_CLASSIFY_VERSION), recursive=True)
 	# Extract the folder 2 above that, which would be the folder containing all experiments in a 4-day grouping
@@ -19,6 +22,9 @@ def get_predictions_in_folder(folder: os.path):
 # Generates a list of behavior predictions found in project folder
 # Assumes that the prediction paths look like 'project/experiment_folder/video_behavior/v1/BEHAVIOR_NAME/video.h5'
 def get_behaviors_in_folder(folder: os.path):
+	# This glob requires a trailing slash
+	if folder[-1] != '/':
+		folder = folder[:-1]
 	possible_files = glob.glob(folder + '**/v' + str(BEHAVIOR_CLASSIFY_VERSION) + '/*', recursive=True)
 	behaviors = [re.sub('.*/','',x) for x in possible_files]
 	behaviors = list(set(behaviors))
@@ -28,6 +34,9 @@ def get_behaviors_in_folder(folder: os.path):
 # Returns a sorted list of pose files
 # TODO: If multiple pose files exist, only pick the newest
 def get_poses_in_folder(folder: os.path):
+	# This glob can't use trailing slash
+	if folder[-1] == '/':
+		folder = folder[:-1]
 	return sorted(glob.glob(folder + '**/*' + POSE_REGEX_STR))
 
 # Returns a prediction file from a pose filename and behavior
