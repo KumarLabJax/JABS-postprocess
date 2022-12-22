@@ -62,7 +62,7 @@ for cur_behavior, tmp_df in all_annotations.groupby('behavior'):
 		int_mat, u_mat, iou_mat = gutils.get_iou_mat(gt_bouts, pr_bouts)
 		iou_list.append(iou_mat)
 	# For each behavior, we can scan the thresholds for performances
-	for threshold in np.arange(0,1,0.05):
+	for threshold in np.arange(0.05,1.01,0.05):
 		precision, recall, f1 = gutils.calc_temporal_iou_metrics(iou_list, threshold)
 		performance_df.append(pd.DataFrame({'behavior':[cur_behavior], 'threshold':[threshold], 'precision':[precision], 'recall':[recall], 'f1':[f1]}))
 
