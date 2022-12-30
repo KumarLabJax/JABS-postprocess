@@ -97,7 +97,8 @@ def parse_jabs_annotations(file, behavior: str=None):
 	return df_list
 
 # Reads in a collection of files related to an experiment in a folder
-def read_experiment_folder(folder: os.path, behavior: str, interpolate_size: int, stitch_bouts: int, filter_bouts: int):
+# Warning: If linking_dict is supplied but does not contain correct keys, it will unassign identity data
+def read_experiment_folder(folder: os.path, behavior: str, interpolate_size: int, stitch_bouts: int, filter_bouts: int, linking_dict: dict=None):
 	# Figure out what pose files exist
 	files_in_experiment = putils.get_poses_in_folder(folder)
 	all_predictions = []
@@ -122,9 +123,10 @@ def read_experiment_folder(folder: os.path, behavior: str, interpolate_size: int
 		all_predictions.append(predictions)
 	all_predictions = pd.concat(all_predictions).reset_index(drop=True)
 	# Correct for identities across videos
-	linking_dict = link_identities(folder)
+	if linking_dict is None:
+		linking_dict = link_identities(folder)
 	all_predictions['longterm_idx'] = [linking_dict[x][y] if x in linking_dict.keys() and y in linking_dict[x].keys() else -1 for x,y in zip(all_predictions['video_name'].values, all_predictions['animal_idx'])]
-	return all_predictions
+	return all_predictions, linking_dict
 
 # Reads in all the annotations of a given project folder
 def read_project_annotations(folder: os.path, behavior: str=None):
