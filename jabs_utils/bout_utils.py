@@ -51,7 +51,7 @@ def filter_data(starts, durations, values, max_gap_size: int, values_to_remove: 
 					new_durations[cur_gap-1] = new_durations[cur_gap-1] + int(np.floor(duration_deleted/2))
 					# Next bout also needs start time adjusted
 					new_durations[cur_gap+1] = new_durations[cur_gap+1] + int(np.ceil(duration_deleted/2))
-					new_starts[cur_gap+1] = new_starts[cur_gap+1] + int(np.floor(duration_deleted/2))
+					new_starts[cur_gap+1] = new_starts[cur_gap+1] - int(np.ceil(duration_deleted/2))
 					# Delete out the gap
 					new_durations = np.delete(new_durations, [cur_gap])
 					new_starts = np.delete(new_starts, [cur_gap])
