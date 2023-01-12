@@ -7,9 +7,10 @@ import re
 from datetime import datetime
 import scipy
 import globalflow as gflow
+import cv2
 
 import jabs_utils.project_utils as putils
-from jabs_utils.bout_utils import rle, filter_data
+from jabs_utils.bout_utils import rle, filter_data, get_bout_dists
 
 # Reads in a single file and returns a dataframe of events
 # threshold should only be adjusted if you know what you're doing (most ML classifiers expect to be using a 0.5 threshold)
@@ -54,8 +55,7 @@ def parse_predictions(pred_file: os.path, threshold: float=0.5, interpolate_size
 
 # Makes a rle result of no predictions on any mice
 def make_no_predictions(pose_file: os.path):
-	pose_ext = re.sub('.*(' + putils.POSE_REGEX_STR + ').*', '\\1', pose_file)
-	pose_v = int(re.sub('[^0-9]', '', pose_ext))
+	pose_v = putils.get_pose_v(pose_file)
 	if pose_v == 2:
 		n_animals = 1
 		n_frames = np.shape(f['poseest/points'])[0]
@@ -95,6 +95,132 @@ def parse_jabs_annotations(file, behavior: str=None):
 	else:
 		df_list = pd.DataFrame({'animal_idx':[], 'behavior':[], 'start':[], 'duration':[], 'is_behavior':[], 'video':[]})
 	return df_list
+
+# Reads in activity data into a matrix of shape [animal_idx, frame_idx] where each element contains the distance travelled in that frame
+# Negative values indicate that the mouse was not present to make a measurement
+# Smoothing indicates the number of frames to convolve an average (0 = no smoothing)
+# Distance is calculated by the pose version.
+# 	pose_v6 uses segmentation centroid motion
+# 	pose_v2-5 uses pose centroid motion (ignoring tail points)
+# Note that all_activity returned is NOT re-sorted by linking_dict (within-video ID -> within-experiment ID) and is still for an individual file.
+def read_activity_folder(folder: os.path, activity_threshold: float, interpolate_size: int, stitch_bouts: int, filter_bouts: int, smooth: int=0, forced_pose_v: int=None, linking_dict: dict=None, activity_dict: dict={}):
+	# Figure out what pose files exist
+	files_in_experiment = putils.get_poses_in_folder(folder)
+	all_predictions = []
+	for cur_file in files_in_experiment:
+		# Parse out the video name from the pose file
+		video_name = putils.pose_to_video(cur_file)
+		date_format = r'\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}'
+		video_prefix = re.sub('_' + date_format, '', video_name)
+		# Extract date from the name
+		time_str = re.search(date_format, video_name).group()
+		formatted_time = str(datetime.strptime(time_str, '%Y-%m-%d_%H-%M-%S'))
+		if cur_file in activity_dict.keys():
+			cur_activity = activity_dict[cur_file]
+		else:
+			cur_activity = parse_activity(cur_file, smooth=smooth, forced_pose_v=forced_pose_v)
+			activity_dict[cur_file] = cur_activity
+		# Convert the raw activity into activity bouts
+		# Threshold the activity data
+		activity_behavior = (cur_activity > activity_threshold).astype(np.int)
+		activity_behavior[cur_activity<0] = -1
+		rle_data = []
+		for idx in np.arange(len(activity_behavior)):
+			cur_starts, cur_durations, cur_values = rle(activity_behavior[idx])
+			# Interpolate missing data first
+			if interpolate_size > 0:
+				cur_starts, cur_durations, cur_values = filter_data(cur_starts, cur_durations, cur_values, max_gap_size=interpolate_size, values_to_remove=[-1])
+			# Filter out short gaps next
+			if stitch_bouts > 0:
+				cur_starts, cur_durations, cur_values = filter_data(cur_starts, cur_durations, cur_values, max_gap_size=stitch_bouts, values_to_remove=[0])
+			# Filter out short predictions last
+			if filter_bouts > 0:
+				cur_starts, cur_durations, cur_values = filter_data(cur_starts, cur_durations, cur_values, max_gap_size=filter_bouts, values_to_remove=[1])
+			tmp_df = pd.DataFrame({'animal_idx':idx, 'start':cur_starts, 'duration':cur_durations, 'is_behavior':cur_values})
+			tmp_df['distance'] = get_bout_dists(cur_starts, cur_durations, cur_activity[idx])
+			rle_data.append(tmp_df)
+		rle_data = pd.concat(rle_data).reset_index(drop=True)
+		# Toss data into the full matrix
+		rle_data['time'] = formatted_time
+		rle_data['exp_prefix'] = video_prefix
+		rle_data['video_name'] = video_name
+		all_predictions.append(rle_data)
+	all_predictions = pd.concat(all_predictions).reset_index(drop=True)
+	# Correct for identities across videos
+	if linking_dict is None:
+		linking_dict = link_identities(folder)
+	all_predictions['longterm_idx'] = [linking_dict[x][y] if x in linking_dict.keys() and y in linking_dict[x].keys() else -1 for x,y in zip(all_predictions['video_name'].values, all_predictions['animal_idx'])]
+	return all_predictions, linking_dict, activity_dict
+
+# Reads in activity data for a single file
+def parse_activity(pose_file: os.path, smooth: int=0, forced_pose_v: int=None):
+	pose_v = putils.get_pose_v(pose_file)
+	if forced_pose_v is not None:
+		assert pose_v >= forced_pose_v
+		pose_v = forced_pose_v
+	# Read in the data to produce a center_data variable which is of shape [n_frame, n_animal, 2] containing all [x,y] centers
+	if pose_v == 2 or pose_v == 3:
+		raise NotImplementedError('Pose v2 and v3 distance not supported yet.')
+	elif pose_v == 4 or pose_v == 5:
+		with h5py.File(pose_file, 'r') as f:
+			pose_data = f['poseest/points'][:,:,:10,:]
+			animal_ids = f['poseest/instance_embed_id'][:]
+			cm_per_px = f['poseest'].attrs['cm_per_pixel']
+		animals = np.unique(animal_ids)
+		animals = animals[animals!=0]
+		center_data = np.zeros([pose_data.shape[0], max(animals), 2])
+		for frame in np.arange(len(pose_data)):
+			for i, cur_animal in enumerate(animal_ids[frame]):
+				# Skip calculations for animals not assigned an ID
+				if cur_animal == 0:
+					pass
+				else:
+					center_data[frame,cur_animal-1,:] = get_pose_center(pose_data[frame,i])
+	elif pose_v == 6:
+		raise NotImplementedError('Pose v6 distance not supported yet.')
+	else:
+		raise NotImplementedError('Pose version not detected for ' + str(pose_file) + ' (' + str(pose_v) + '). Cannot interpret data.')
+	# Mask out missing data before calculating gradients (distances)
+	center_data = np.ma.array(center_data, mask=np.tile(np.expand_dims(np.all(center_data==0, axis=2), axis=-1), [1,1,2]))
+	dists = np.gradient(center_data, axis=0)
+	dists = np.hypot(dists[:,:,0], dists[:,:,1])
+	# We need to fill the data before the smoothing because the convolve doesn't operate on masked arrays
+	# We happen to use a fill value of 0 to not corrupt actual distances in averages too badly
+	dists.fill_value = 0
+	dists_mask = dists.mask
+	dists = dists.filled()
+	# Smooth if requested
+	if smooth > 0:
+		smoothed_dists = []
+		for animal_idx in np.arange(np.shape(dists)[1]):
+			# Mean smooth using convolve
+			smoothed_dists.append(scipy.signal.fftconvolve(dists[:,animal_idx], np.ones([smooth])/smooth, mode='same'))
+		dists = np.stack(smoothed_dists, axis=1)
+	# Finally convert to pixel space
+	dists = dists * cm_per_px
+	# Fix any negative values
+	dists[dists_mask] = -1
+	# Return the filled matrix transposed (distances stored as animal_id x frame)
+	return dists.T
+
+# Returns a center of a pose using the centroid of a convex hull
+def get_pose_center(pose: np.array):
+	tmp_pose = pose[np.all(pose!=0,axis=1),:]
+	if len(tmp_pose)>3:
+		convex_hull = cv2.convexHull(tmp_pose.astype(np.float32))
+		moments = cv2.moments(convex_hull)
+		# If the area is 0, return a default value
+		if moments['m00'] == 0:
+			return np.array([0,0])
+		return np.array([moments['m10']/moments['m00'], moments['m01']/moments['m00']])
+	elif len(tmp_pose)>0:
+		return np.mean(tmp_pose, axis=0)
+	else:
+		return np.array([0,0])
+
+# Returns a center of a segmentation
+def get_segmentation_center(contours: np.array):
+	raise NotImplementedError('Segmentation centers not supported yet.')
 
 # Reads in a collection of files related to an experiment in a folder
 # Warning: If linking_dict is supplied but does not contain correct keys, it will unassign identity data
@@ -208,7 +334,7 @@ def link_identities(folder: os.path, check_model: bool=False):
 
 # Helper function for reading a pose files identity data
 def read_pose_ids(pose_file: os.path):
-	pose_v = int(re.sub('.*_pose_est_v([2-5]).*', '\\1', pose_file))
+	pose_v = pose_v = putils.get_pose_v(pose_file)
 	if pose_v == 2:
 		raise NotImplementedError('Single mouse pose doesn\'t run on longterm experiments.')
 	# No longterm IDs exist, provide a default value of the correct shape

@@ -57,3 +57,13 @@ def filter_data(starts, durations, values, max_gap_size: int, values_to_remove: 
 					new_starts = np.delete(new_starts, [cur_gap])
 					new_values = np.delete(new_values, [cur_gap])
 	return new_starts, new_durations, new_values
+
+# Returns the distance traveled during bouts
+def get_bout_dists(bout_starts, bout_durations, raw_activity):
+	# Zero out missing data to not mess up sums
+	activity_copy = np.copy(raw_activity)
+	activity_copy[activity_copy<0] = 0
+	dists = []
+	for cur_start, cur_duration in zip(bout_starts, bout_durations):
+		dists.append(np.sum(activity_copy[cur_start:cur_start+cur_duration]))
+	return np.asarray(dists)

@@ -57,3 +57,10 @@ def video_to_prediction(file: os.path, behavior: str):
 def pose_to_video(file: os.path):
 	file_no_folder = os.path.basename(file)
 	return re.sub(POSE_REGEX_STR, '', file_no_folder)
+
+# Helper function to get the pose version as an integer from a given filename
+def get_pose_v(pose_file: os.path):
+	pose_ext = re.sub('.*(' + POSE_REGEX_STR + ').*', '\\1', pose_file)
+	pose_ext = os.path.splitext(pose_ext)[0]
+	pose_v = int(re.sub('[^0-9]', '', pose_ext))
+	return pose_v

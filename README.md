@@ -21,9 +21,23 @@ python3 generate_behavior_tables.py --project_folder /path/to/project/folder --o
 
 This will generate 2 behavior table files per behavior detected in the project folder. Optionally, you can include `--behavior BehaviorName` to only generate a behavior table for that one behavior.
 
+To see all options with a short description, run:
+
+```
+python3 generate_behavior_tables.py --help
+```
+
 ## Single Animal OFA Table Generation
 
 This feature is not yet implemented.
+
+## Activity Breakpoints
+
+There are implicit activity tables generated based on simply mouse motion. Each activity table produced is based on a single threshold of motion. The user can set multiple thresholds to apply then use downstream tools to merge each filter into activity bands (eg 10cm/s to 20cm/s).
+
+The tables generated are strictly "greater than" the listed threshold for a behavior state of "1". Additionally, bouts of "0" are "less than" the threshold.
+
+Default activity breakpoints are set to a single breakpoint indicating "inactive" and "active" at 2.5cm/s.
 
 ## Notes on Filtering
 
@@ -47,6 +61,8 @@ Lots of the functions used in generating these behavior tables were designed for
 # Data table format
 
 There are two behavior tables generated. Both contain a header line to store parameters used while calling the script.
+
+Some features are optional, because calculating them can be expensive. These options are noted with an asterisk (\*)
 
 ## Header Data
 
@@ -74,6 +90,7 @@ The bout table contains a compressed RLE encoded format for each bout (post-filt
     * `-1` : The mouse did not have a pose to create a prediction
     * `0` : Not behavior prediction
     * `1` : Behavior prediction
+* `distance`\* : Distance traveled during bout
 
 ## Binned Table
 
@@ -92,6 +109,8 @@ Summaries included:
     * If a bout spans multiple time bins, it will be divided into both via the proportion of time
     * Sum of bouts across bins produces the correct total count
     * Note that bouts cannot span between video files
+* `not_behavior_dist`\* : Total distance traveled during not behavior bouts
+* `behavior_dist`\* : Total distance traveled during behavior bouts
 
 # Example Plotting Code
 
