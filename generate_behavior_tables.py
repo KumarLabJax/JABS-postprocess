@@ -9,16 +9,20 @@ from jabs_utils.bin_utils import generate_binned_results
 from jabs_utils.write_utils import write_experiment_data
 
 # Generates the 2 prediction tables given an experiment
-def generate_behavior_tables(args, behavior: str, linking_dicts: dict={}):
+def generate_behavior_tables(args, behavior: str, linking_dicts: dict={}, experiment_dist_dicts: dict={}):
 	# Detect all the experiments in a folder
 	exp_folders = get_predictions_in_folder(args.project_folder)
 	# Read in all the experiments (RLE format)
 	experiment_bout_data = []
 	for cur_experiment in exp_folders:
-		if cur_experiment in linking_dicts.keys():
-			experiment_data, _ = read_experiment_folder(cur_experiment, behavior, interpolate_size = args.interpolate_size, stitch_bouts = args.stitch_gap, filter_bouts = args.min_bout_length, linking_dict = linking_dicts[cur_experiment])
+		if cur_experiment in experiment_dist_dicts.keys():
+			distance_dict = experiment_dist_dicts[cur_experiment]
 		else:
-			experiment_data, linking_dict = read_experiment_folder(cur_experiment, behavior, interpolate_size = args.interpolate_size, stitch_bouts = args.stitch_gap, filter_bouts = args.min_bout_length)
+			distance_dict = {}
+		if cur_experiment in linking_dicts.keys():
+			experiment_data, _ = read_experiment_folder(cur_experiment, behavior, interpolate_size = args.interpolate_size, stitch_bouts = args.stitch_gap, filter_bouts = args.min_bout_length, linking_dict = linking_dicts[cur_experiment], activity_dict = distance_dict)
+		else:
+			experiment_data, linking_dict = read_experiment_folder(cur_experiment, behavior, interpolate_size = args.interpolate_size, stitch_bouts = args.stitch_gap, filter_bouts = args.min_bout_length, activity_dict = distance_dict)
 			linking_dicts[cur_experiment] = linking_dict
 		experiment_bout_data.append(experiment_data)
 	# Merge experiments into a single project (RLE format)
@@ -86,20 +90,15 @@ def main(argv):
 	# This also calculates a full linking dict that we can reuse later
 	activity_dicts = {}
 	linking_dicts = {}
-	from time import time
 	if not args.exclude_activity:
 		print('Calculating activity for ' + ', '.join([str(x) for x in args.activity_thresholds]) + 'cm/s breakpoints')
 		for activity_idx, cur_threshold in enumerate(args.activity_thresholds):
 			threshold_cm_per_frame = cur_threshold/30
-			start_time = time()
 			activity_table, linking_dicts, activity_dicts = generate_activity_tables(args, threshold_cm_per_frame, linking_dicts, activity_dicts, activity_idx = activity_idx)
-			print(time()-start_time)
 	# Loop through all behaviors:
 	print('Generating behavior tables for behaviors: ' + ', '.join(behaviors) + ' in ' + args.project_folder + '...')
 	for behavior in behaviors:
-		start_time = time()
-		cur_table, linking_dicts = generate_behavior_tables(args, behavior, linking_dicts)
-		print(time()-start_time)
+		cur_table, linking_dicts = generate_behavior_tables(args, behavior, linking_dicts, activity_dicts)
 
 if __name__  == '__main__':
 	main(sys.argv[1:])

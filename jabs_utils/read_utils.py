@@ -224,7 +224,7 @@ def get_segmentation_center(contours: np.array):
 
 # Reads in a collection of files related to an experiment in a folder
 # Warning: If linking_dict is supplied but does not contain correct keys, it will unassign identity data
-def read_experiment_folder(folder: os.path, behavior: str, interpolate_size: int, stitch_bouts: int, filter_bouts: int, linking_dict: dict=None):
+def read_experiment_folder(folder: os.path, behavior: str, interpolate_size: int, stitch_bouts: int, filter_bouts: int, linking_dict: dict=None, activity_dict: dict={}):
 	# Figure out what pose files exist
 	files_in_experiment = putils.get_poses_in_folder(folder)
 	all_predictions = []
@@ -240,6 +240,15 @@ def read_experiment_folder(folder: os.path, behavior: str, interpolate_size: int
 		prediction_file = putils.pose_to_prediction(cur_file, behavior)
 		if os.path.exists(prediction_file):
 			predictions = parse_predictions(prediction_file, interpolate_size=interpolate_size, stitch_bouts=stitch_bouts, filter_bouts=filter_bouts)
+			# Add in distance traveled during bouts, if available
+			if cur_file in activity_dict.keys():
+				predictions['distance'] = 0
+				for idx in np.unique(predictions['animal_idx']):
+					if idx != -1:
+						rows_to_assign = predictions['animal_idx']==idx
+						predictions.loc[rows_to_assign,'distance'] = get_bout_dists(predictions.loc[rows_to_assign,'start'], predictions.loc[rows_to_assign,'duration'], activity_dict[cur_file][idx])
+			else:
+				pass
 		else:
 			predictions = make_no_predictions(cur_file)
 		# Toss data into the full matrix

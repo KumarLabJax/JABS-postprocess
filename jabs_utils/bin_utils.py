@@ -48,7 +48,7 @@ def get_animal_results(event_df: pd.DataFrame, bin_size_minutes: int=60, fps=30)
 		if 'distance' in bins_to_summarize.keys():
 			bins_to_summarize['calc_dist'] = bins_to_summarize['distance']*bins_to_summarize['percent_bout']
 		else:
-			bins_to_summarize['calc_dist'] = 0
+			pass
 		pd.options.mode.chained_assignment = 'warn'
 		results = {}
 		results['time'] = [str(t1)]
@@ -56,8 +56,9 @@ def get_animal_results(event_df: pd.DataFrame, bin_size_minutes: int=60, fps=30)
 		results['time_not_behavior'] = bins_to_summarize.loc[bins_to_summarize['is_behavior']==0,'duration'].sum()
 		results['time_behavior'] = bins_to_summarize.loc[bins_to_summarize['is_behavior']==1,'duration'].sum()
 		results['bout_behavior'] = len(bins_to_summarize.loc[bins_to_summarize['is_behavior']==1])
-		results['not_behavior_dist'] = bins_to_summarize.loc[bins_to_summarize['is_behavior']==0,'calc_dist'].sum()
-		results['behavior_dist'] = bins_to_summarize.loc[bins_to_summarize['is_behavior']==1,'calc_dist'].sum()
+		if 'distance' in bins_to_summarize.keys():
+			results['not_behavior_dist'] = bins_to_summarize.loc[bins_to_summarize['is_behavior']==0,'calc_dist'].sum()
+			results['behavior_dist'] = bins_to_summarize.loc[bins_to_summarize['is_behavior']==1,'calc_dist'].sum()
 		results_df_list.append(pd.DataFrame(results))
 	return pd.concat(results_df_list)
 
