@@ -118,7 +118,11 @@ def read_activity_folder(folder: os.path, activity_threshold: float, interpolate
 		if cur_file in activity_dict.keys():
 			cur_activity = activity_dict[cur_file]
 		else:
-			cur_activity = parse_activity(cur_file, smooth=smooth, forced_pose_v=forced_pose_v)
+			try:
+				cur_activity = parse_activity(cur_file, smooth=smooth, forced_pose_v=forced_pose_v)
+			# Skip any files that raise an error
+			except (NotImplementedError, ValueError):
+				continue
 			activity_dict[cur_file] = cur_activity
 		# Convert the raw activity into activity bouts
 		# Threshold the activity data
@@ -168,6 +172,8 @@ def parse_activity(pose_file: os.path, smooth: int=0, forced_pose_v: int=None):
 			cm_per_px = f['poseest'].attrs['cm_per_pixel']
 		animals = np.unique(animal_ids)
 		animals = animals[animals!=0]
+		if len(animals)==0:
+			raise ValueError('Pose v5 didn\'t have any animals to calculate distance')
 		center_data = np.zeros([pose_data.shape[0], max(animals), 2])
 		for frame in np.arange(len(pose_data)):
 			for i, cur_animal in enumerate(animal_ids[frame]):
