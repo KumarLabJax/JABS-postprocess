@@ -62,7 +62,7 @@ Lots of the functions used in generating these behavior tables were designed for
 
 There are two behavior tables generated. Both contain a header line to store parameters used while calling the script.
 
-Some features are optional, because calculating them can be expensive. These options are noted with an asterisk (\*)
+Some features are optional, because calculating them can be expensive. These options are noted with an asterisk (\*). While default behavior is to include them, they are not guaranteed.
 
 ## Header Data
 
@@ -100,7 +100,7 @@ Summaries included:
 
 * `longterm_idx` : Identity of the mouse in the experiment
 * `exp_prefix` : Detected experiment ID
-* `level_0` : Formatted time string in "%Y-%m-%d %H:%M:%S" of the time bin
+* `time` : Formatted time string in "%Y-%m-%d %H:%M:%S" of the time bin
 * `time_no_pred` : Count of frames where mouse did not have a predicted pose (missing data)
 * `time_not_behavior` : Count of frames where mouse is not performing the behavior
 * `time_behavior` : Count of frames where mouse is performing the behavior
