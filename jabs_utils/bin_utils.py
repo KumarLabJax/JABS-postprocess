@@ -30,13 +30,13 @@ def get_animal_results(event_df: pd.DataFrame, bin_size_minutes: int=60, fps=30)
 		start_frame = time_to_frame(str(t1), str(start_time), fps)
 		end_frame = time_to_frame(str(t2), str(start_time), fps)
 		bins_to_summarize = event_df[np.logical_and(event_df['adjusted_start']>=start_frame, event_df['adjusted_end']<=end_frame)]
-		cut_start = pd.copy(event_df[np.logical_and(event_df['adjusted_start']<start_frame, event_df['adjusted_end']>=start_frame)])
+		cut_start = pd.Dataframe.copy(event_df[np.logical_and(event_df['adjusted_start']<start_frame, event_df['adjusted_end']>=start_frame)])
 		if len(cut_start)>0:
 			new_duration = cut_start['duration'] - (cut_start['adjusted_start'] - start_frame)
 			cut_start['percent_bout'] = new_duration/cut_start['duration']
 			cut_start['duration'] = new_duration
 			bins_to_summarize = pd.concat([bins_to_summarize,cut_start])
-		cut_end = pd.copy(event_df[np.logical_and(event_df['adjusted_start']<end_frame, event_df['adjusted_end']>=end_frame)])
+		cut_end = pd.Dataframe.copy(event_df[np.logical_and(event_df['adjusted_start']<end_frame, event_df['adjusted_end']>=end_frame)])
 		if len(cut_end)>0:
 			new_duration = cut_end['duration'] - (end_frame - cut_end['adjusted_start'])
 			cut_end['percent_bout'] = new_duration/cut_end['duration']
