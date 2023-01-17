@@ -21,7 +21,7 @@ def get_animal_results(event_df: pd.DataFrame, bin_size_minutes: int=60, fps=30)
 	end_time = round_hour(datetime.strptime(max(event_df['time']),'%Y-%m-%d %H:%M:%S'), up=True)
 	# Calculate the framewise time bins that we need to summarize
 	time_idx = pd.date_range(start=start_time, end=end_time, freq=str(bin_size_minutes) + 'min')
-	event_df['adjusted_start'] = [int(time_to_frame(x['time'],str(start_time),30) + x['start']) for row_idx, x in event_df.iterrows()]
+	event_df['adjusted_start'] = [time_to_frame(x['time'],str(start_time),30) + x['start'] for row_idx, x in event_df.iterrows()]
 	event_df['adjusted_end'] = event_df['adjusted_start']+event_df['duration']
 	event_df['percent_bout'] = 1.0
 	# Summarize each time bin
@@ -38,7 +38,7 @@ def get_animal_results(event_df: pd.DataFrame, bin_size_minutes: int=60, fps=30)
 			bins_to_summarize = pd.concat([bins_to_summarize,cut_start])
 		cut_end = event_df[np.logical_and(event_df['adjusted_start']<end_frame, event_df['adjusted_end']>=end_frame)]
 		if len(cut_end)>0:
-			new_duration = cut_end['duration'] - (cut_end['adjusted_start'] - start_frame)
+			new_duration = cut_end['duration'] - (end_frame - cut_end['adjusted_start'])
 			cut_end['percent_bout'] = new_duration/cut_end['duration']
 			cut_end['duration'] = new_duration
 			bins_to_summarize = pd.concat([bins_to_summarize,cut_end])
@@ -75,4 +75,4 @@ def round_hour(t, up: bool=False):
 # Converts a time to an equivalent frame index relative to rel_t
 def time_to_frame(t: str, rel_t: str, fps: float):
 	delta = datetime.strptime(t,'%Y-%m-%d %H:%M:%S')-datetime.strptime(rel_t,'%Y-%m-%d %H:%M:%S')
-	return delta.total_seconds()*fps
+	return np.int64(delta.total_seconds()*fps)
