@@ -23,7 +23,10 @@ From: python:3.9-slim-bullseye
 	pip install --upgrade pip
 	pip install -r /JABS-postprocess/vm/requirements.txt
 
-# %runscript
-# 	/bin/bash /pipeline/docker/infer-identity.sh $@
+%environment
+	export PYTHONPATH=$PYTHONPATH:/JABS-postprocess
+
+%runscript
+	/bin/bash /JABS-postprocess/vm/runscript.sh $@
 
 
