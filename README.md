@@ -119,3 +119,13 @@ Since the data is in a "long" format, it is generally straight forward to genera
 Some example code for generating plots is located in [test_plot.py](test_plot.py).
 
 Additionally, there are a variety of helper functions located in [analysis_utils](analysis_utils/) for reading, manipulating, and generating plots of data using the data tables produced.
+
+# Dense Ground Truth Performance Scripts
+
+These scripts are still in the prototyping phase, but example methods of comparing predictions with a JABS annotated set of videos are available in [compare_gt.py](compare_gt.py)
+
+# Video Clip Extraction
+
+[create_video_snippets.py](create_video_snippets.py) will create video snippets based on a produced bout table file.
+
+This currently requires videos to all be in the same folder, not separated into different project folders.
