@@ -13,7 +13,7 @@ def main(argv):
 	parser.add_argument('--bout_file', help='Path to the bout file', required=True)
 	parser.add_argument('--input_video_folder', help='Path to folder with videos', required=True)
 	parser.add_argument('--output_video_folder', help='Path to folder for output videos', required=True)
-	parser.add_argument('--pad_length', help='Length of bout padding in frames', type=int, default=30)
+	parser.add_argument('--pad_length', help='Length of padding to both sides of a bout in frames (default=30)', type=int, default=30)
 	args = parser.parse_args()
 
 	# read in the bout table
