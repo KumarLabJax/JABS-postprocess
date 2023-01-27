@@ -18,6 +18,7 @@ def generate_binned_results(df: pd.DataFrame, bin_size_minutes: int=60):
 def get_animal_results(event_df: pd.DataFrame, bin_size_minutes: int=60, fps=30):
 	# Get the range that the experiment spans
 	try:
+		# TODO: Add support for different sized experiment blocks (re-use block below to make an end time that is adjusted per-video)
 		start_time = round_hour(datetime.strptime(min(event_df['time']),'%Y-%m-%d %H:%M:%S'))
 		end_time = round_hour(datetime.strptime(max(event_df['time']),'%Y-%m-%d %H:%M:%S'), up=True)
 	# Timestamp doesn't exist. Make up some. This assumes only 1 video exists and just makes up timestamps based on the available bout data.
