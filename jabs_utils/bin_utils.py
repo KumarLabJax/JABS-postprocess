@@ -8,7 +8,7 @@ def generate_binned_results(df: pd.DataFrame, bin_size_minutes: int=60):
 	grouped_df = df.groupby(['exp_prefix','longterm_idx'])
 	all_results = []
 	for cur_group, cur_data in grouped_df:
-		binned_results = get_animal_results(cur_data)
+		binned_results = get_animal_results(cur_data, bin_size_minutes)
 		binned_results['exp_prefix'], binned_results['longterm_idx'] = cur_group
 		all_results.append(binned_results)
 	all_results = pd.concat(all_results)
@@ -17,8 +17,22 @@ def generate_binned_results(df: pd.DataFrame, bin_size_minutes: int=60):
 # Function that transforms event data into binned time format summaries
 def get_animal_results(event_df: pd.DataFrame, bin_size_minutes: int=60, fps=30):
 	# Get the range that the experiment spans
-	start_time = round_hour(datetime.strptime(min(event_df['time']),'%Y-%m-%d %H:%M:%S'))
-	end_time = round_hour(datetime.strptime(max(event_df['time']),'%Y-%m-%d %H:%M:%S'), up=True)
+	try:
+		start_time = round_hour(datetime.strptime(min(event_df['time']),'%Y-%m-%d %H:%M:%S'))
+		end_time = round_hour(datetime.strptime(max(event_df['time']),'%Y-%m-%d %H:%M:%S'), up=True)
+	# Timestamp doesn't exist. Make up some. This assumes only 1 video exists and just makes up timestamps based on the available bout data.
+	except:
+		start_time_str = '1970-01-01 00:00:00'
+		start_time = round_hour(datetime.strptime(start_time_str,'%Y-%m-%d %H:%M:%S'))
+		num_hours = np.max(event_df['start'] + event_df['duration'])/fps/60//60 + 1
+		end_time_str = start_time_str
+		for _ in np.arange(num_hours):
+			end_time = round_hour(datetime.strptime(end_time_str, '%Y-%m-%d %H:%M:%S'), up=True)
+			end_time_str = str(end_time)
+		# Add one last hour (can be discarded later)
+		end_time = round_hour(datetime.strptime(end_time_str, '%Y-%m-%d %H:%M:%S'), up=True)
+		# Also adjust the df to contain valid times
+		event_df['time'] = start_time_str
 	# Calculate the framewise time bins that we need to summarize
 	time_idx = pd.date_range(start=start_time, end=end_time, freq=str(bin_size_minutes) + 'min')
 	event_df['adjusted_start'] = [time_to_frame(x['time'],str(start_time),30) + x['start'] for row_idx, x in event_df.iterrows()]

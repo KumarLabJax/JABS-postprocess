@@ -31,6 +31,8 @@ def generate_behavior_tables(args, behavior: str, linking_dicts: dict={}, experi
 	write_experiment_data(args, behavior, experiment_bout_data, suffix='_' + behavior + '_bouts')
 	# Convert project into binned data
 	experiment_bin_data = generate_binned_results(experiment_bout_data, args.out_bin_size)
+	# Remove empty data
+	experiment_bin_data = experiment_bin_data[~np.all(experiment_bin_data[['time_no_pred','time_not_behavior','time_behavior']]==0, axis=1)]
 	# Write binned project output
 	write_experiment_data(args, behavior, experiment_bin_data, suffix='_' + behavior + '_summaries')
 	return experiment_bout_data, linking_dicts

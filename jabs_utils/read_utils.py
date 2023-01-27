@@ -239,9 +239,6 @@ def read_experiment_folder(folder: os.path, behavior: str, interpolate_size: int
 		video_name = putils.pose_to_video(cur_file)
 		date_format = r'\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}'
 		video_prefix = re.sub('_' + date_format, '', video_name)
-		# Extract date from the name
-		time_str = re.search(date_format, video_name).group()
-		formatted_time = str(datetime.strptime(time_str, '%Y-%m-%d_%H-%M-%S'))
 		# Check if there are behavior predictions and read in data appropriately
 		prediction_file = putils.pose_to_prediction(cur_file, behavior)
 		if os.path.exists(prediction_file):
@@ -258,15 +255,26 @@ def read_experiment_folder(folder: os.path, behavior: str, interpolate_size: int
 		else:
 			predictions = make_no_predictions(cur_file)
 		# Toss data into the full matrix
-		predictions['time'] = formatted_time
+		# Extract date from the name
+		try:
+			# TODO: update date format to also handle just a date (no time)
+			time_str = re.search(date_format, video_name).group()
+			formatted_time = str(datetime.strptime(time_str, '%Y-%m-%d_%H-%M-%S'))
+			predictions['time'] = formatted_time
+		except:
+			predictions['time'] = 'NA'
 		predictions['exp_prefix'] = video_prefix
 		predictions['video_name'] = video_name
 		all_predictions.append(predictions)
 	all_predictions = pd.concat(all_predictions).reset_index(drop=True)
 	# Correct for identities across videos
-	if linking_dict is None:
-		linking_dict = link_identities(folder)
-	all_predictions['longterm_idx'] = [linking_dict[x][y] if x in linking_dict.keys() and y in linking_dict[x].keys() else -1 for x,y in zip(all_predictions['video_name'].values, all_predictions['animal_idx'])]
+	if np.all(all_predictions['time']!='NA'):
+		if linking_dict is None:
+			linking_dict = link_identities(folder)
+		all_predictions['longterm_idx'] = [linking_dict[x][y] if x in linking_dict.keys() and y in linking_dict[x].keys() else -1 for x,y in zip(all_predictions['video_name'].values, all_predictions['animal_idx'])]
+	else:
+		all_predictions['longterm_idx'] = all_predictions['animal_idx']
+		linking_dict = {}
 	return all_predictions, linking_dict
 
 # Reads in all the annotations of a given project folder
