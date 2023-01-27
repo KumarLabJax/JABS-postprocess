@@ -18,7 +18,7 @@ from jabs_utils.bout_utils import rle, filter_data, get_bout_dists
 # filter_bouts is the minimum length of a bout to keep
 # trim_time allows the user to read only in a portion of the data (Default of none for reading in all data)
 # Note that we carry forward the "pose missing" and "not behavior" events alongside the "behavior" events
-def parse_predictions(pred_file: os.path, threshold: float=0.5, interpolate_size: int=0, stitch_bouts: int=0, filter_bouts: int=0, trim_time: tuple[int, int]=None):
+def parse_predictions(pred_file: os.path, threshold_min: float=0.5, threshold_max=1.0, interpolate_size: int=0, stitch_bouts: int=0, filter_bouts: int=0, trim_time: tuple[int, int]=None):
 	# Read in the raw data
 	with h5py.File(pred_file, 'r') as f:
 		data = f['predictions/predicted_class'][:]
@@ -33,8 +33,12 @@ def parse_predictions(pred_file: os.path, threshold: float=0.5, interpolate_size
 	probability[data==0] = 1-probability[data==0]
 	# Apply a new threshold
 	# Note that when data==-1, this indicates "no pose to predict on"
-	data[np.logical_and(probability>=threshold, data!=-1)] = 1
-	data[np.logical_and(probability<threshold, data!=-1)] = 0
+	data[np.logical_and(probability>=threshold_min, data!=-1)] = 1
+	data[np.logical_and(probability<threshold_min, data!=-1)] = 0
+	# Unassign any "behavior" bouts that are above the max threshold
+	# Note: This should only be used for things like searching for low probability bouts
+	if threshold_max < 1:
+		data[np.logical_and(probability>threshold_max, data!=-1)] = 0
 	# RLE the data
 	rle_data = []
 	for idx in np.arange(len(data)):
