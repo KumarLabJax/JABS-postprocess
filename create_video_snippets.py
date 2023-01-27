@@ -1,8 +1,9 @@
 import pandas as pd
-import plotnine as p9
 import numpy as np
 import imageio
 import argparse, sys
+
+behavior_indicator_idxs = (slice(750,775), slice(350,450), slice(None))
 
 def main(argv):
 	parser = argparse.ArgumentParser(description='Clips the video')
@@ -12,6 +13,7 @@ def main(argv):
 	parser.add_argument('--pad_length', help='Length of padding to both sides of a bout in frames (default=30)', type=int, default=30)
 	parser.add_argument('--longest_bouts', help='Export only the longest n bouts (default is export all bouts)', type=int, default=None)
 	parser.add_argument('--shortest_bouts', help='Export only the shortest n bouts (default is export all bouts)', type=int, default=None)
+	parser.add_argument('--overlay_behavior', help='Overlays a marker on the video to indicate when the behavior is occurring', default=False, action='store_true')
 	args = parser.parse_args()
 
 	# read in the bout table
@@ -41,7 +43,15 @@ def main(argv):
 		clip_idxs = np.arange(start_frame, end_frame)
 		# Copy the frames from the input into the output
 		for idx in clip_idxs:
-			out_vid.append_data(in_vid.get_data(int(idx)))
+			next_frame = in_vid.get_data(int(idx))
+			if args.overlay_behavior:
+				# Behavior is currently active
+				if idx >= row['start'] and idx < row['start'] + row['duration']:
+					next_frame[behavior_indicator_idxs] = (77,175,74) # green
+				# Behavior is not active
+				else:
+					next_frame[behavior_indicator_idxs] = (152,78,163) # purple
+			out_vid.append_data(next_frame)
 		in_vid.close()
 		out_vid.close()
 
