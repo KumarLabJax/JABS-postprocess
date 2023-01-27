@@ -1,9 +1,7 @@
 import pandas as pd
 import numpy as np
-import imageio
 import argparse, sys
-
-behavior_indicator_idxs = (slice(750,775), slice(350,450), slice(None))
+from analysis_utils.vid_utils import write_video_clip
 
 def main(argv):
 	parser = argparse.ArgumentParser(description='Clips the video')
@@ -35,25 +33,16 @@ def main(argv):
 	# Export all the video clips requested
 	for _,row in subset_df.iterrows():
 		full_video_path = (args.input_video_folder) + row['video_name'] + ".avi"
-		in_vid = imageio.get_reader(full_video_path)
-		start_frame = np.clip(row['start'] - (args.pad_length), 0, len(in_vid))
+		start_frame = np.clip(row['start'] - (args.pad_length), 0, None)
 		# We generate a new video based on the new start frame in the clip
-		out_vid = imageio.get_writer((args.output_video_folder) + row['video_name'] + "_" + str(start_frame) + ".avi", fps=30, codec='mpeg4', quality=10)
-		end_frame = np.clip(row['start'] + row['duration'] + (args.pad_length), 0, len(in_vid))
+		out_vid_f = (args.output_video_folder) + row['video_name'] + "_" + str(start_frame) + ".avi"
+		end_frame = np.clip(row['start'] + row['duration'] + (args.pad_length), 0, None)
 		clip_idxs = np.arange(start_frame, end_frame)
-		# Copy the frames from the input into the output
-		for idx in clip_idxs:
-			next_frame = in_vid.get_data(int(idx))
-			if args.overlay_behavior:
-				# Behavior is currently active
-				if idx >= row['start'] and idx < row['start'] + row['duration']:
-					next_frame[behavior_indicator_idxs] = (77,175,74) # green
-				# Behavior is not active
-				else:
-					next_frame[behavior_indicator_idxs] = (152,78,163) # purple
-			out_vid.append_data(next_frame)
-		in_vid.close()
-		out_vid.close()
+		if args.overlay_behavior:
+			behavior_idxs = np.arange(row['start'], row['start']+row['duration'])
+			write_video_clip(in_vid_f=full_video_path, out_vid_f=out_vid_f, clip_idxs=clip_idxs, behavior_idxs=behavior_idxs)
+		else:
+			write_video_clip(in_vid_f=full_video_path, out_vid_f=out_vid_f, clip_idxs=clip_idxs)
 
 if __name__  == '__main__':
 	main(sys.argv[1:])
