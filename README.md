@@ -126,6 +126,8 @@ These scripts are still in the prototyping phase, but example methods of compari
 
 # Video Clip Extraction
 
-[create_video_snippets.py](create_video_snippets.py) will create video snippets based on a produced bout table file.
+[create_video_snippets.py](create_video_snippets.py) will create video snippets based on a produced bout table file. This currently requires videos to all be in the same folder, not separated into different project folders.
 
-This currently requires videos to all be in the same folder, not separated into different project folders.
+[sample_uncertain_vids.py](sample_uncertain_vids.py) utilizes a project folder and predictions. This script requires the complete project used by JABS alongside the predictions generated.
+
+For both of these scripts, check the `--help` function for available filters.
