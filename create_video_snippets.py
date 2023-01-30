@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import argparse, sys
-from analysis_utils.vid_utils import write_video_clip
+from analysis_utils.clip_utils import write_video_clip
 
 def main(argv):
 	parser = argparse.ArgumentParser(description='Clips the video')

@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import argparse, sys, os
-from analysis_utils.vid_utils import write_video_clip
+from analysis_utils.clip_utils import write_video_clip
 from jabs_utils.project_utils import get_behaviors_in_folder, get_predictions_in_folder, get_poses_in_folder, pose_to_prediction, pose_to_video
 from jabs_utils.read_utils import parse_predictions
 
