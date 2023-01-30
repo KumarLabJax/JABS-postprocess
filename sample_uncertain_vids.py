@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
-import argparse, sys, os
-from analysis_utils.clip_utils import write_video_clip
+import argparse, sys, os, re
+from analysis_utils.clip_utils import write_video_clip, write_pose_clip
 from jabs_utils.project_utils import get_behaviors_in_folder, get_predictions_in_folder, get_poses_in_folder, pose_to_prediction, pose_to_video
 from jabs_utils.read_utils import parse_predictions
 
@@ -27,6 +27,7 @@ def main(argv):
 			predictions = parse_predictions(prediction_file, threshold_min=0.5-args.tolerance, threshold_max=0.5+args.tolerance, interpolate_size=5, stitch_bouts=5, filter_bouts=5)
 			vid_base = pose_to_video(cur_pose_file)
 			predictions['full_video_path'] = os.path.dirname(cur_pose_file) + '/' + vid_base + '.avi'
+			predictions['full_pose_path'] = cur_pose_file
 			predictions['video_name'] = vid_base
 			df_list.append(predictions[predictions['is_behavior']==1])
 	df = pd.concat(df_list)
@@ -54,7 +55,8 @@ def main(argv):
 			write_video_clip(in_vid_f=full_video_path, out_vid_f=out_vid_f, clip_idxs=clip_idxs, behavior_idxs=behavior_idxs)
 		else:
 			write_video_clip(in_vid_f=full_video_path, out_vid_f=out_vid_f, clip_idxs=clip_idxs)
-		# TODO: Write an algorithm to also clip the pose files at the same time.
+		out_pose_f = args.output_video_folder + re.sub('(.*)(_pose_est_v[0-9]+.*)', '\\1_' + str(start_frame) + '\\2', os.path.basename(row['full_pose_path']))
+		write_pose_clip(in_pose_f=row['full_pose_path'], out_pose_f=out_pose_f, clip_idxs=clip_idxs)
 
 if __name__  == '__main__':
 	main(sys.argv[1:])
