@@ -8,13 +8,19 @@ from jabs_utils.read_utils import parse_predictions
 def main(argv):
 	parser = argparse.ArgumentParser(description='Scans through a project folder for low predictions for a behavior')
 	parser.add_argument('--input_video_folder', help='Path to folder with videos', required=True)
+	# Setup the scan mode
+	g1 = parser.add_mutually_exclusive_group()
+	g1.add_argument('--bouts', help='Generates clips for bouts of behavior', dest='mode', action='store_const', const='bout')
+	g1.add_argument('--uncertain', help='Generates clips for uncertainty blocks', dest='mode', action='store_const', const='uncertain')
+	parser.set_defaults(mode='bout')
 	parser.add_argument('--behavior', help='Behavior to sample for low probabilities', required=True)
 	parser.add_argument('--output_video_folder', help='Path to folder for output videos', required=True)
 	parser.add_argument('--pad_length', help='Length of padding to both sides of a bout in frames (default=30)', type=int, default=30)
 	parser.add_argument('--longest_bouts', help='Export only the longest n bouts (default is export all bouts)', type=int, default=None)
 	parser.add_argument('--shortest_bouts', help='Export only the shortest n bouts (default is export all bouts)', type=int, default=None)
 	parser.add_argument('--overlay_behavior', help='Overlays a marker on the video to indicate when the behavior is occurring', default=False, action='store_true')
-	parser.add_argument('--tolerance', help='Tolerance for uncertainty. Default is 0.1 (0.4-0.6 probabilities)', type=float, default=0.1)
+	parser.add_argument('--threshold', help='Threshold for bouts. Default is 0.5. Only used with --bouts', type=float, default=0.5)
+	parser.add_argument('--tolerance', help='Tolerance for uncertainty. Default is 0.1 (0.4-0.6 probabilities). Only used with --uncertain', type=float, default=0.1)
 	args = parser.parse_args()
 
 	# Figure out what videos are available and read in their data
@@ -24,7 +30,13 @@ def main(argv):
 		files_in_experiment = get_poses_in_folder(cur_exp)
 		for cur_pose_file in files_in_experiment:
 			prediction_file = pose_to_prediction(cur_pose_file, args.behavior)
-			predictions = parse_predictions(prediction_file, threshold_min=0.5-args.tolerance, threshold_max=0.5+args.tolerance, interpolate_size=5, stitch_bouts=5, filter_bouts=5)
+			if args.mode == 'bout':
+				predictions = parse_predictions(prediction_file, interpolate_size=args.pad_length, stitch_bouts=args.pad_length, filter_bouts=5)
+				predictions = predictions[predictions['is_behavior'] == 1]
+			elif args.mode == 'uncertain':
+				predictions = parse_predictions(prediction_file, threshold_min=0.5-args.tolerance, threshold_max=0.5+args.tolerance, interpolate_size=args.pad_length, stitch_bouts=args.pad_length, filter_bouts=5)
+			else:
+				raise(NotImplementedError(args.mode + ' not implemented.'))
 			vid_base = pose_to_video(cur_pose_file)
 			predictions['full_video_path'] = os.path.dirname(cur_pose_file) + '/' + vid_base + '.avi'
 			predictions['full_pose_path'] = cur_pose_file
