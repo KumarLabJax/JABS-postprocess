@@ -6,6 +6,7 @@ from jabs_utils.project_utils import get_behaviors_in_folder, get_predictions_in
 from jabs_utils.read_utils import parse_predictions
 from jabs_utils.bout_utils import filter_data, get_arena_bouts
 
+
 def main(argv):
 	parser = argparse.ArgumentParser(description='Scans through a project folder for low predictions for a behavior')
 	parser.add_argument('--input_video_folder', help='Path to folder with videos', required=True)
@@ -32,27 +33,30 @@ def main(argv):
 		files_in_experiment = get_poses_in_folder(cur_exp)
 		for cur_pose_file in files_in_experiment:
 			prediction_file = pose_to_prediction(cur_pose_file, args.behavior)
-			# Read in the necessary bout data
-			if args.mode == 'bout':
-				predictions = parse_predictions(prediction_file, interpolate_size=args.pad_length, stitch_bouts=args.pad_length, filter_bouts=5)
-			elif args.mode == 'uncertain':
-				predictions = parse_predictions(prediction_file, threshold_min=0.5-args.tolerance, threshold_max=0.5+args.tolerance, interpolate_size=args.pad_length, stitch_bouts=args.pad_length, filter_bouts=5)
+			if os.path.exists(prediction_file):
+				# Read in the necessary bout data
+				if args.mode == 'bout':
+					predictions = parse_predictions(prediction_file, interpolate_size=args.pad_length, stitch_bouts=args.pad_length, filter_bouts=5)
+				elif args.mode == 'uncertain':
+					predictions = parse_predictions(prediction_file, threshold_min=0.5-args.tolerance, threshold_max=0.5+args.tolerance, interpolate_size=args.pad_length, stitch_bouts=args.pad_length, filter_bouts=5)
+				else:
+					raise(NotImplementedError(args.mode + ' not implemented.'))
+				# Convert the animal data into arena data
+				if not args.preserve_individual:
+					# rle data is in format starts, durations, states
+					rle_data = get_arena_bouts(predictions['start'],predictions['duration'],predictions['is_behavior'])
+					filtered_rle_data = filter_data(rle_data[0], rle_data[1], rle_data[2], max_gap_size=args.pad_length, values_to_remove=[0])
+					predictions = pd.DataFrame({'animal_idx':0, 'start':filtered_rle_data[0], 'duration':filtered_rle_data[1], 'is_behavior':filtered_rle_data[2]})
+				# Only look at behavior
+				predictions = predictions[predictions['is_behavior'] == 1]
+				# Add some additional useful fields
+				vid_base = pose_to_video(cur_pose_file)
+				predictions['full_video_path'] = os.path.dirname(cur_pose_file) + '/' + vid_base + '.avi'
+				predictions['full_pose_path'] = cur_pose_file
+				predictions['video_name'] = vid_base
+				df_list.append(predictions[predictions['is_behavior']==1])
 			else:
-				raise(NotImplementedError(args.mode + ' not implemented.'))
-			# Convert the animal data into arena data
-			if not args.preserve_individual:
-				# rle data is in format starts, durations, states
-				rle_data = get_arena_bouts(predictions['start'],predictions['duration'],predictions['is_behavior'])
-				filtered_rle_data = filter_data(rle_data[0], rle_data[1], rle_data[2], max_gap_size=args.pad_length, values_to_remove=[0])
-				predictions = pd.DataFrame({'animal_idx':0, 'start':filtered_rle_data[0], 'duration':filtered_rle_data[1], 'is_behavior':filtered_rle_data[2]})
-			# Only look at behavior
-			predictions = predictions[predictions['is_behavior'] == 1]
-			# Add some additional useful fields
-			vid_base = pose_to_video(cur_pose_file)
-			predictions['full_video_path'] = os.path.dirname(cur_pose_file) + '/' + vid_base + '.avi'
-			predictions['full_pose_path'] = cur_pose_file
-			predictions['video_name'] = vid_base
-			df_list.append(predictions[predictions['is_behavior']==1])
+				print("Prediction not found for file: " + prediction_file)
 	df = pd.concat(df_list)
 
 	# Filter the bouts as necessary
