@@ -38,10 +38,13 @@ def write_pose_clip(in_pose_f, out_pose_f, clip_idxs):
 		# Warning: If number of frames is equal to number of animals in id_centers, the centers will be cropped as well
 		# However, this should future-proof the function to not depend on the pose version as much by auto-detecting all fields and copying them
 		frame_len = in_f['poseest/points'].shape[0]
+		# Adjust the clip_idxs to safely fall within the available data
+		adjusted_clip_idxs = np.array(clip_idxs)[np.isin(clip_idxs, np.arange(frame_len))]
+		# Cycle over all the available datasets
 		for key in np.concatenate([all_pose_fields, all_static_fields]):
 			# Clip data that has the shape
 			if in_f[key].shape[0] == frame_len:
-				all_data[key] = in_f[key][clip_idxs]
+				all_data[key] = in_f[key][adjusted_clip_idxs]
 				if len(in_f[key].attrs.keys()) > 0:
 					all_attrs[key] = dict(in_f[key].attrs.items())
 			# Just copy other stuff as-is
