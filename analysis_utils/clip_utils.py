@@ -3,12 +3,18 @@ import h5py
 import os
 import numpy as np
 
+# Approximately the bottom middle of an 800x800 frame
+# TODO: Have this location float based on the input video (currently will fail on a 480x480 video)
 behavior_indicator_idxs = (slice(750,775), slice(350,450), slice(None))
 
 # Basic helper function to write out video clip data
+# If behavior_idxs is provided, it writes a 2nd video with a a behavior status bar on the bottom
 def write_video_clip(in_vid_f, out_vid_f, clip_idxs, behavior_idxs=None):
 	in_vid = imageio.get_reader(in_vid_f)
 	out_vid = imageio.get_writer(out_vid_f, fps=30, codec='mpeg4', quality=10)
+	if behavior_idxs is not None:
+		behavior_vid_f = os.path.splitext(out_vid_f)[0] + '_behavior.avi'
+		out_behavior_vid = imageio.get_writer(behavior_vid_f, fps=30, codec='mpeg4', quality=10)
 	# Copy the frames from the input into the output
 	for idx in clip_idxs:
 		# Test to see if the video frame exists to read
@@ -16,6 +22,7 @@ def write_video_clip(in_vid_f, out_vid_f, clip_idxs, behavior_idxs=None):
 			next_frame = in_vid.get_data(int(idx))
 		except:
 			break
+		out_vid.append_data(next_frame)
 		if behavior_idxs is not None:
 			# Behavior is currently active
 			if np.isin(idx, behavior_idxs):
@@ -23,9 +30,11 @@ def write_video_clip(in_vid_f, out_vid_f, clip_idxs, behavior_idxs=None):
 			# Behavior is not active
 			else:
 				next_frame[behavior_indicator_idxs] = (152,78,163) # purple
-		out_vid.append_data(next_frame)
+			out_behavior_vid.append_data(next_frame)
 	in_vid.close()
 	out_vid.close()
+	if behavior_idxs is not None:
+		out_behavior_vid.close()
 
 # Function that reads in and clips a pose file
 def write_pose_clip(in_pose_f, out_pose_f, clip_idxs):
