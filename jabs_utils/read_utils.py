@@ -18,7 +18,7 @@ from jabs_utils.bout_utils import rle, filter_data, get_bout_dists
 # filter_bouts is the minimum length of a bout to keep
 # trim_time allows the user to read only in a portion of the data (Default of none for reading in all data)
 # Note that we carry forward the "pose missing" and "not behavior" events alongside the "behavior" events
-def parse_predictions(pred_file: os.path, threshold: float=0.5, interpolate_size: int=0, stitch_bouts: int=0, filter_bouts: int=0, trim_time: tuple[int, int]=None):
+def parse_predictions(pred_file: os.path, threshold_min: float=0.5, threshold_max=1.0, interpolate_size: int=0, stitch_bouts: int=0, filter_bouts: int=0, trim_time: tuple[int, int]=None):
 	# Read in the raw data
 	with h5py.File(pred_file, 'r') as f:
 		data = f['predictions/predicted_class'][:]
@@ -33,8 +33,12 @@ def parse_predictions(pred_file: os.path, threshold: float=0.5, interpolate_size
 	probability[data==0] = 1-probability[data==0]
 	# Apply a new threshold
 	# Note that when data==-1, this indicates "no pose to predict on"
-	data[np.logical_and(probability>=threshold, data!=-1)] = 1
-	data[np.logical_and(probability<threshold, data!=-1)] = 0
+	data[np.logical_and(probability>=threshold_min, data!=-1)] = 1
+	data[np.logical_and(probability<threshold_min, data!=-1)] = 0
+	# Unassign any "behavior" bouts that are above the max threshold
+	# Note: This should only be used for things like searching for low probability bouts
+	if threshold_max < 1:
+		data[np.logical_and(probability>threshold_max, data!=-1)] = 0
 	# RLE the data
 	rle_data = []
 	for idx in np.arange(len(data)):
@@ -239,9 +243,6 @@ def read_experiment_folder(folder: os.path, behavior: str, interpolate_size: int
 		video_name = putils.pose_to_video(cur_file)
 		date_format = r'\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}'
 		video_prefix = re.sub('_' + date_format, '', video_name)
-		# Extract date from the name
-		time_str = re.search(date_format, video_name).group()
-		formatted_time = str(datetime.strptime(time_str, '%Y-%m-%d_%H-%M-%S'))
 		# Check if there are behavior predictions and read in data appropriately
 		prediction_file = putils.pose_to_prediction(cur_file, behavior)
 		if os.path.exists(prediction_file):
@@ -258,15 +259,26 @@ def read_experiment_folder(folder: os.path, behavior: str, interpolate_size: int
 		else:
 			predictions = make_no_predictions(cur_file)
 		# Toss data into the full matrix
-		predictions['time'] = formatted_time
+		# Extract date from the name
+		try:
+			# TODO: update date format to also handle just a date (no time)
+			time_str = re.search(date_format, video_name).group()
+			formatted_time = str(datetime.strptime(time_str, '%Y-%m-%d_%H-%M-%S'))
+			predictions['time'] = formatted_time
+		except:
+			predictions['time'] = 'NA'
 		predictions['exp_prefix'] = video_prefix
 		predictions['video_name'] = video_name
 		all_predictions.append(predictions)
 	all_predictions = pd.concat(all_predictions).reset_index(drop=True)
 	# Correct for identities across videos
-	if linking_dict is None:
-		linking_dict = link_identities(folder)
-	all_predictions['longterm_idx'] = [linking_dict[x][y] if x in linking_dict.keys() and y in linking_dict[x].keys() else -1 for x,y in zip(all_predictions['video_name'].values, all_predictions['animal_idx'])]
+	if np.all(all_predictions['time']!='NA'):
+		if linking_dict is None:
+			linking_dict = link_identities(folder)
+		all_predictions['longterm_idx'] = [linking_dict[x][y] if x in linking_dict.keys() and y in linking_dict[x].keys() else -1 for x,y in zip(all_predictions['video_name'].values, all_predictions['animal_idx'])]
+	else:
+		all_predictions['longterm_idx'] = all_predictions['animal_idx']
+		linking_dict = {}
 	return all_predictions, linking_dict
 
 # Reads in all the annotations of a given project folder

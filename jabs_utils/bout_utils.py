@@ -67,3 +67,12 @@ def get_bout_dists(bout_starts, bout_durations, raw_activity):
 	for cur_start, cur_duration in zip(bout_starts, bout_durations):
 		dists.append(np.sum(activity_copy[cur_start:cur_start+cur_duration]))
 	return np.asarray(dists)
+
+# Flattens a per-animal bout events into an arena events
+# If any animal is doing the behavior, the behavior is occurring for the arena. Otherwise, not-behavior.
+# Warning: This will fill any "missing animals" as not-behavior
+def get_arena_bouts(starts, durations, values):
+	bin_vec = np.zeros(np.max(starts+durations), dtype=np.int8)
+	for cur_start, cur_dur in zip(starts[values==1], durations[values==1]):
+		bin_vec[cur_start:cur_start + cur_dur] = 1
+	return rle(bin_vec)
