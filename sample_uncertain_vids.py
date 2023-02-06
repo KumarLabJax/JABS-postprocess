@@ -75,6 +75,9 @@ def main(argv):
 		start_frame = np.clip(row['start'] - (args.pad_length), 0, None)
 		# We generate a new video based on the new start frame in the clip
 		out_vid_f = args.output_video_folder + row['video_name'] + "_" + str(start_frame) + ".avi"
+		out_folder = os.path.dirname(out_vid_f)
+		if not os.path.exists(out_folder):
+			os.makedirs(out_folder, exist_ok=True)
 		end_frame = np.clip(row['start'] + row['duration'] + (args.pad_length), 0, None)
 		clip_idxs = np.arange(start_frame, end_frame)
 		if args.overlay_behavior:

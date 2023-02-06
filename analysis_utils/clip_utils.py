@@ -14,7 +14,12 @@ def write_video_clip(in_vid_f, out_vid_f, clip_idxs, behavior_idxs=None):
 	out_vid = imageio.get_writer(out_vid_f, fps=30, codec='mpeg4', quality=10)
 	if behavior_idxs is not None:
 		behavior_vid_f = os.path.splitext(out_vid_f)[0] + '_behavior.avi'
-		out_behavior_vid = imageio.get_writer(behavior_vid_f, fps=30, codec='mpeg4', quality=10)
+		# Don't overwrite the video if it already exists
+		if os.path.exists(behavior_vid_f):
+			print('Not overwriting behavior video: ' + behavior_vid_f)
+			out_behavior_vid = None
+		else:
+			out_behavior_vid = imageio.get_writer(behavior_vid_f, fps=30, codec='mpeg4', quality=10)
 	# Copy the frames from the input into the output
 	for idx in clip_idxs:
 		# Test to see if the video frame exists to read
@@ -23,7 +28,7 @@ def write_video_clip(in_vid_f, out_vid_f, clip_idxs, behavior_idxs=None):
 		except:
 			break
 		out_vid.append_data(next_frame)
-		if behavior_idxs is not None:
+		if out_behavior_vid is not None:
 			# Behavior is currently active
 			if np.isin(idx, behavior_idxs):
 				next_frame[behavior_indicator_idxs] = (77,175,74) # green
@@ -33,7 +38,7 @@ def write_video_clip(in_vid_f, out_vid_f, clip_idxs, behavior_idxs=None):
 			out_behavior_vid.append_data(next_frame)
 	in_vid.close()
 	out_vid.close()
-	if behavior_idxs is not None:
+	if out_behavior_vid is not None:
 		out_behavior_vid.close()
 
 # Function that reads in and clips a pose file
