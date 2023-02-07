@@ -74,7 +74,11 @@ def make_no_predictions(pose_file: os.path):
 	rle_data = []
 	for idx in np.arange(n_animals):
 		rle_data.append(pd.DataFrame({'animal_idx':idx, 'start':[0], 'duration':[n_frames], 'is_behavior':-1}))
-	rle_data = pd.concat(rle_data).reset_index(drop=True)
+	if len(rle_data)>0:
+		rle_data = pd.concat(rle_data).reset_index(drop=True)
+	# If no animals exist, just fill some junk data
+	else:
+		rle_data = pd.DataFrame({'animal_idx':[0], 'start':[0], 'duration':[0], 'is_behavior':[-1]})
 	return rle_data
 
 # Reads in JABS bout annotation files and places it in the same format as prodiction RLE
