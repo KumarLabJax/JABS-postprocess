@@ -46,6 +46,7 @@ def write_pose_clip(in_pose_f, out_pose_f, clip_idxs):
 	# Extract the data that may have frames as the first dimension
 	all_data = {}
 	all_attrs = {}
+	all_compression_flags = {}
 	with h5py.File(in_pose_f, 'r') as in_f:
 		all_pose_fields = ['poseest/' + key for key in in_f['poseest'].keys()]
 		all_static_fields = ['static_objects/' + key for key in in_f['static_objects'].keys()]
@@ -66,13 +67,17 @@ def write_pose_clip(in_pose_f, out_pose_f, clip_idxs):
 				all_data[key] = in_f[key][:]
 				if len(in_f[key].attrs.keys()) > 0:
 					all_attrs[key] = dict(in_f[key].attrs.items())
+			all_compression_flags[key] = in_f[key].compression_opts
 		all_attrs['poseest'] = dict(in_f['poseest'].attrs.items())
 	# Write the data out
 	if os.path.exists(out_pose_f):
 		print('Warning: Overwriting pose file: ' + out_pose_f)
 	with h5py.File(out_pose_f, 'w') as out_f:
 		for key, data in all_data.items():
-			out_f[key] = data
+			if all_compression_flags[key] is None:
+				out_f.create_dataset(key, data=data)
+			else:
+				out_f.create_dataset(key, data=data, compression='gzip', compression_opts=all_compression_flags[key])
 		for key, attrs in all_attrs.items():
 			for cur_attr, data in attrs.items():
 				out_f[key].attrs.create(cur_attr, data)
