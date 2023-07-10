@@ -79,8 +79,8 @@ Stores data pertaining to the script call that globally addresses all data withi
 
 The bout table contains a compressed RLE encoded format for each bout (post-filtering)
 
-* `animal_idx` : Animal index in the pose file (typically not used)
-* `longterm_idx` : Identity of the mouse in the experiment
+* `animal_idx` : Animal index in the pose file (typically not used, see pose file documentation for indexing rules)
+* `longterm_idx` : Identity of the mouse in the experiment (-1 reserved for unlinked animals, animals in experiment are index 0+)
 * `exp_prefix` : Detected experiment ID
 * `time` : Formatted time string in "%Y-%m-%d %H:%M:%S" of the time this bout was extracted from
 * `video_name` : Name of the video this bout was extracted from
@@ -98,7 +98,7 @@ The binned table contains summaries of the results in time-bins.
 
 Summaries included:
 
-* `longterm_idx` : Identity of the mouse in the experiment
+* `longterm_idx` : Identity of the mouse in the experiment (-1 reserved for unlinked animals, animals in experiment are index 0+)
 * `exp_prefix` : Detected experiment ID
 * `time` : Formatted time string in "%Y-%m-%d %H:%M:%S" of the time bin
 * `time_no_pred` : Count of frames where mouse did not have a predicted pose (missing data)
