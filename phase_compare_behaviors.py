@@ -27,8 +27,7 @@ def main(argv):
     parser.add_argument('--first_results', help='Path to the results file conatining prediction data for the first behavior', required=True)
     parser.add_argument('--second_results', help='Path to the results file containing prediction data for the second behavior', required=True)
     parser.add_argument('--jmcrs_data', help='Path to the metadata for the mouse experiments', required=True)
-    parser.add_argument('--filter_lixit', help='Whether or not to filter out videos with lixit problems', default=False, action='store_true')
-    parser.add_argument('--filter_food_hopper', help='Whether or not to filter out videos with food hopper problems', default=False, action='store_true')
+    parser.add_argument('--filter_experiments', help='Whether or not to filter out videos with lixit/food hopper/data problems', default=False, action='store_true')
     args = parser.parse_args()
     run_analysis(args)
 
@@ -47,19 +46,11 @@ def run_analysis(args):
     _, df1 = read_ltm_summary_table(results_file1, jmcrs_metadata=jmcrs_data)
     _, df2 = read_ltm_summary_table(results_file2, jmcrs_metadata=jmcrs_data)
 
-    if args.filter_food_hopper: 
+    if args.filter_experiments: 
         # Filter out experiments with food hopper problems
-        filter_out = pd.read_csv('/Users/hamilc/Jax/analysis_figures/male/to_remove.csv').drop_duplicates().values.tolist()
-        filter_list = list(chain.from_iterable(filter_out))
-        df1 = df1[~df1['exp_prefix'].isin(filter_list)]
-        df2 = df2[~df2['exp_prefix'].isin(filter_list)]
-
-    if args.filter_lixit:
-        # Filter out experiments with lixit problems 
-        filter_out = pd.read_csv('/Users/hamilc/Jax/analysis_figures/male/questionable_lixit.csv', header=None)
-        filter_out = [re.sub('.*(MD[XB][0-9]+).*', '\\1', x) for x in filter_out[0]]
-        df1 = df1[~np.isin(df1['ExptNumber'], filter_out)]
-        df2 = df2[~np.isin(df2['ExptNumber'], filter_out)]
+        remove_experiments = ['MDB0003','MDB0004','MDB0048','MDB0011','MDX0005','MDX0008','MDX0017']
+        df1 = df1[~np.isin(df1['ExptNumber'], remove_experiments)]
+        df2 = df2[~np.isin(df2['ExptNumber'], remove_experiments)]
 
     # Delete out bins where no data exists
     no_data = np.all(df1[['time_no_pred','time_not_behavior','time_behavior']]==0, axis=1)
@@ -119,12 +110,14 @@ def run_analysis(args):
 
     phase_df = pd.DataFrame.from_dict(amplitude_phase_dict_eat, orient='index')
 
+    # Using this to format the axes for the frequency plot 
     def to_fraction(x):
         if x[0] == 0: 
             return 0
         else: 
             return '{}/{}'.format(x[0], x[1])
 
+    # Plot the frequency-amplitude space using fractions as the axis so the frequencies are more readable 
     plot_df = phase_df.explode(['freq', 'amplitude', 'phase', 'period'])
     plot_df[['freq', 'amplitude', 'phase', 'period']] = plot_df[['freq', 'amplitude', 'phase', 'period']].astype(float)
     (ggplot(plot_df, aes(x='freq', y='amplitude', group='mouse')) + 
@@ -181,6 +174,7 @@ def run_analysis(args):
         theme(title = element_text(hjust=0.5))
         ).save('period_hist.png')
 
+    # Used to calculate the centroids for the mean vectors in the raleigh plots 
     def pol2cart(rho, phi):
         x = rho * np.cos(phi)
         y = rho * np.sin(phi)
@@ -196,6 +190,7 @@ def run_analysis(args):
     phase_diff_df = pd.DataFrame(columns=['mouse_id', 'phase_diff', 'amplitude1', 'amplitude2', 'strain', 'phase1', 'phase2'])
     for mouse in np.unique(ray_df[ray_df['behavior'] == BEHAVIOR1]['mouse_id']):
         mouse_id = mouse[0:-1]
+        # If the mouse has an entry for one behavior but not the other we skip it
         if mouse_id + 'b' not in np.unique(ray_df['mouse_id']):
             continue
         phase1 = ray_df[ray_df['mouse_id'] == mouse_id + 'a']['peak_phase'].values[0]
@@ -299,6 +294,8 @@ def run_analysis(args):
     btbr_df2['r'] = 1.07
 
     # Rayleigh Plot 
+    # The code for this plot could definitely be optimized like the code is in the phase_compare_rooms.py script, just haven't had time to do that yet
+    # so most of it is hard coded for the certain strains and each of the plot elements is added manually 
     fig = make_subplots(rows=1, cols=2, specs=[[{'type': 'polar'}]*2]*1, subplot_titles=('C5JBL/6J', 'BTBR T<+> ltpr3<tf>/J'))
 
     fig.add_trace(go.Scatterpolar(
@@ -492,7 +489,7 @@ def run_analysis(args):
         outfile.write(f"Mean Radius and Phase for BTBR: {r_btbr, theta_btbr}\n")
         outfile.write(f"Shift of {theta_btbr * (24/(2*np.pi)) * 60} minutes\n\n")
 
-    # Plot the raleigh plot
+    # This raleigh plot plots the phase differences that we calculated before, showing trends in how the two behaviors being compared differ 
     fig3 = make_subplots(rows=1, cols=2, specs=[[{'type': 'polar'}]*2]*1, subplot_titles=('C5JBL/6J', 'BTBR T<+> ltpr3<tf>/J'))
 
     fig3.add_trace(go.Scatterpolar(
