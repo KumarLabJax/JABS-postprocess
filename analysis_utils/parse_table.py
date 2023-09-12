@@ -3,11 +3,16 @@ import numpy as np
 import os
 import re
 
+# Helper function to just read in a generic behavior table
+def read_postprocess_table(behavior_table: os.path):
+	header_data = pd.read_csv(behavior_table, nrows=1)
+	df = pd.read_csv(behavior_table, skiprows=2)
+	return header_data, df
+
 # Helper function to read in longterm 
 def read_ltm_summary_table(behavior_table: os.path, jmcrs_metadata: os.path=None, light_cycle: list[int]=[6,18], timezone: str='America/New_York'):
 	# Read in the behavior table data
-	header_data = pd.read_csv(behavior_table, nrows=1)
-	df = pd.read_csv(behavior_table, skiprows=2)
+	header_data, df = read_postprocess_table(behavior_table)
 	# Format a bunch of the time data into a more meaningful format
 	# str -> datetime object (handling daylight savings)
 	df['time'] = pd.to_datetime(df['time']).dt.tz_localize(tz=timezone)
