@@ -49,7 +49,10 @@ def write_pose_clip(in_pose_f, out_pose_f, clip_idxs):
 	all_compression_flags = {}
 	with h5py.File(in_pose_f, 'r') as in_f:
 		all_pose_fields = ['poseest/' + key for key in in_f['poseest'].keys()]
-		all_static_fields = ['static_objects/' + key for key in in_f['static_objects'].keys()]
+		if 'static_objects' in in_f.keys():
+			all_static_fields = ['static_objects/' + key for key in in_f['static_objects'].keys()]
+		else:
+			all_static_fields = []
 		# Warning: If number of frames is equal to number of animals in id_centers, the centers will be cropped as well
 		# However, this should future-proof the function to not depend on the pose version as much by auto-detecting all fields and copying them
 		frame_len = in_f['poseest/points'].shape[0]
