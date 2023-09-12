@@ -23,8 +23,8 @@ def main(argv):
     parser.add_argument('--behavior', help='Name of behavior to be analyzed', required=True)
     parser.add_argument('--results_file', help='Path to results file containing behavior prediction data', required=True)
     parser.add_argument('--jmcrs_data', help='Path to the metadata for the mouse experiments', required=True)
-    parser.add_argument('--filter_lixit', help='Whether or not to filter out videos with lixit problems', default=False, action='store_true')
-    parser.add_argument('--filter_food_hopper', help='Whether or not to filter out videos with food hopper problems', default=False, action='store_true')
+    parser.add_argument('--filter_lixit', help='File containing experiments to filter out videos with lixit problems', default=None)
+    parser.add_argument('--filter_food_hopper', help='File containing experiments to filter out videos with food hopper problems', default=None)
     args = parser.parse_args()
     run_analysis(args)
 
@@ -39,13 +39,13 @@ def run_analysis(args):
 
     if args.filter_food_hopper:
         # Filter out bad videos for certain behavior
-        filter_out = pd.read_csv('/Users/hamilc/Jax/analysis_figures/male/to_remove.csv').drop_duplicates().values.tolist()
+        filter_out = pd.read_csv(args.filter_food_hopper).drop_duplicates().values.tolist()
         filter_list = list(chain.from_iterable(filter_out))
         df = df[~df['exp_prefix'].isin(filter_list)]
 
     if args.filter_lixit:
         # Filter out experiments with lixit problems 
-        filter_out = pd.read_csv('/Users/hamilc/Jax/analysis_figures/male/questionable_lixit.csv', header=None)
+        filter_out = pd.read_csv(args.filter_lixit, header=None)
         filter_out = [re.sub('.*(MD[XB][0-9]+).*', '\\1', x) for x in filter_out[0]]
         df = df[~np.isin(df['ExptNumber'], filter_out)]
 

@@ -27,7 +27,8 @@ def main(argv):
     parser.add_argument('--first_results', help='Path to the results file conatining prediction data for the first behavior', required=True)
     parser.add_argument('--second_results', help='Path to the results file containing prediction data for the second behavior', required=True)
     parser.add_argument('--jmcrs_data', help='Path to the metadata for the mouse experiments', required=True)
-    parser.add_argument('--filter_experiments', help='Whether or not to filter out videos with lixit/food hopper/data problems', default=False, action='store_true')
+    # TODO: Should change default to None once the list Cayson used gets a more permanent spot...
+    parser.add_argument('--filter_experiments', help='List of experiment IDs with lixit/food hopper/data problems to remove', default=['MDB0003','MDB0004','MDB0048','MDB0011','MDX0005','MDX0008','MDX0017'], nargs='+')
     args = parser.parse_args()
     run_analysis(args)
 
@@ -48,7 +49,7 @@ def run_analysis(args):
 
     if args.filter_experiments: 
         # Filter out experiments with food hopper problems
-        remove_experiments = ['MDB0003','MDB0004','MDB0048','MDB0011','MDX0005','MDX0008','MDX0017']
+        remove_experiments = args.filter_experiments
         df1 = df1[~np.isin(df1['ExptNumber'], remove_experiments)]
         df2 = df2[~np.isin(df2['ExptNumber'], remove_experiments)]
 
@@ -63,7 +64,7 @@ def run_analysis(args):
     df2["Unique_animal"] = df2['longterm_idx'].astype(str) + df2['ExptNumber'] + 'b'
     df = pd.concat([df1, df2])
 
-    # Filter out one experiment over one day for poster plot
+    # Filter out one experiment per strain over one day for poster plot
     df1 = df[np.isin(df['ExptNumber'], ["MDB0049", "MDB0015"])]
     df1 = df1[df1['zt_exp_time'].dt.days == 3]
     df['avg_bout_length'] = df['time_behavior']/df['bout_behavior']
