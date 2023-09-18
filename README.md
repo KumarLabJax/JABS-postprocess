@@ -1,5 +1,7 @@
 # Installation
 
+## Singularity Container
+
 This code contains a [singularity definition file](vm/JABS-postprocess.def) for assistance with installing the python environment. This environment supports both generating behavior table files and plotting the data in python.
 
 Example building of the singularity image:
@@ -9,7 +11,14 @@ cd vm
 singularity build --fakeroot ../../JABS-Postprocessing.sif JABS-postprocess.def
 ```
 
-Optionally, you can also just use `pip3 install -r vm/requirements.txt` with a python environment. Only python3.9 has been tested.
+## Virtual Environment
+
+```python3 -m venv postprocess_venv
+source postprocess_venv/bin/activate
+pip3 install -r vm/requirements.txt
+```
+
+Only python3.10 has been tested.
 
 # Generating Behavior Tables
 
