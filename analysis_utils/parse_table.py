@@ -17,7 +17,7 @@ def read_ltm_summary_table(behavior_table: os.path, jmcrs_metadata: os.path=None
 	# str -> datetime object (handling daylight savings)
 	df['time'] = pd.to_datetime(df['time']).dt.tz_localize(tz=timezone)
 	# Normalize experiment time to be relative to experiment starts
-	exp_starts = df.groupby('exp_prefix').agg({'time':min}).reset_index()
+	exp_starts = df.groupby('exp_prefix')['time'].min().reset_index()
 	exp_starts.columns = ['exp_prefix','exp_start_time']
 	exp_starts['start_date'] = exp_starts['exp_start_time'].dt.normalize()
 	df = pd.merge(df, exp_starts, on='exp_prefix', how='left')
