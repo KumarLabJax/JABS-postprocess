@@ -42,6 +42,12 @@ def read_ltm_summary_table(behavior_table: os.path, jmcrs_metadata: os.path=None
 	df['zt_time_hour'] = df['zt_time'].dt.hour
 	# Since we want to account for missing data, we should calculate the relative time spent per hour in behavior relative to not behavior
 	df['rel_time_behavior'] = df['time_behavior']/(df['time_behavior'] + df['time_not_behavior'])
+	# Some cleanup
+	# Delete out bins where no data exists
+	no_data = np.all(df[['time_no_pred','time_not_behavior','time_behavior']]==0, axis=1)
+	df = df[~no_data]
+	# Add behavior column
+	df['Behavior'] = header_data['Behavior'][0]
 	return header_data, df
 
 # Creates a sub-table filtering by time

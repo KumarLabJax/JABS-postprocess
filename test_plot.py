@@ -15,15 +15,7 @@ results_file = 'Results_2023-01-13_Approach_summaries.csv'
 
 jmcrs_data = '~/Downloads/2022-11-16 TOM_TotalQueryForConfluence.xlsx'
 
-def read_adjusted_data(file, jmcrs):
-	header_data, df = read_ltm_summary_table(file, jmcrs_metadata=jmcrs)
-	# Delete out bins where no data exists
-	no_data = np.all(df[['time_no_pred','time_not_behavior','time_behavior']]==0, axis=1)
-	df = df[~no_data]
-	df['Behavior'] = header_data['Behavior'][0]
-	return header_data, df
-
-header_data, df = read_adjusted_data(results_file, jmcrs_data)
+header_data, df = read_ltm_summary_table(results_file, jmcrs_data)
 # Now we have a dataframe with a bunch of temporal columns and a bunch of feature columns
 df.keys()
 
@@ -46,7 +38,7 @@ filter_experiment_time(df).groupby('Strain').agg({'rel_time_behavior':np.mean})
 # This is stretching the limits of the function capability. Facets don't work too well. Nonetheless, plot room by behavior predictions
 # Earlier social paper scans w/ heuristics and classifiers
 folder = '/media/bgeuther/Storage/TempStorage/B6-BTBR/results/'
-results_files = [folder + x for x in ['Results_2023-01-13_Nose_nose_summaries.csv', 'Results_2023-01-13_Nose_genital_summaries.csv', 'Results_2023-01-13_Chase_summaries.csv', 'Results_2023-01-13_Activity_1_summaries.csv', 'Results_2023-02-07_heuristic_approach_summaries.csv', 'Results_2023-02-07_heuristic_close_summaries.csv', 'Results_2023-02-07_heuristic_contact_summaries.csv', 'Results_2023-02-07_heuristic_nose_ear_summaries.csv', 'Results_2023-02-07_heuristic_nose_genital_summaries.csv', 'Results_2023-02-07_heuristic_nose_nose_summaries.csv']]
+results_files = [folder + x for x in ['Results_2023-01-13_Nose_nose_summaries.csv', 'Results_2023-01-13_Nose_genital_summaries.csv', 'Results_2023-01-13_Approach_summaries.csv', 'Results_2023-01-13_Chase_summaries.csv', 'Results_2023-01-13_Leave_summaries.csv', 'Results_2023-01-13_Activity_1_summaries.csv', 'Results_2023-02-07_heuristic_approach_summaries.csv', 'Results_2023-02-07_heuristic_close_summaries.csv', 'Results_2023-02-07_heuristic_contact_summaries.csv', 'Results_2023-02-07_heuristic_nose_ear_summaries.csv', 'Results_2023-02-07_heuristic_nose_genital_summaries.csv', 'Results_2023-02-07_heuristic_nose_nose_summaries.csv']]
 
 # Filtering tests
 # results_files = [
@@ -64,8 +56,8 @@ results_files = [folder + x for x in ['Results_2023-01-13_Nose_nose_summaries.cs
 
 # This inline loop reads in all the data from results_files.
 # Note that header data is discarded
-# header_data, df = read_adjusted_data(results_file, jmcrs_data)
-df = pd.concat([read_adjusted_data(x, jmcrs_data)[1] for x in results_files])
+# header_data, df = read_ltm_summary_table(results_file, jmcrs_data)
+df = pd.concat([read_ltm_summary_table(x, jmcrs_data)[1] for x in results_files])
 
 
 (generate_time_vs_feature_plot(filter_experiment_time(df[df['Behavior']!='Activity > 2.5cm/s']), 'zt_time_hour', 'rel_time_behavior')+p9.facet_grid('Behavior~Room', scales='free_y')).draw().show()
