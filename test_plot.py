@@ -43,53 +43,36 @@ generate_time_vs_feature_plot(filter_experiment_time(df), 'zt_time_hour', 'bout_
 filter_experiment_time(df).groupby('Strain').agg({'rel_time_behavior':np.mean})
 
 # Read in more behaviors to make an aggregate graph
-# Nose behaviors don't look good, but are present here
 # This is stretching the limits of the function capability. Facets don't work too well. Nonetheless, plot room by behavior predictions
-results_file2 = 'Results_2023-01-13_Nose_nose_summaries.csv'
-header_data, df2 = read_adjusted_data(results_file2, jmcrs_data)
-results_file3 = 'Results_2023-01-13_Nose_genital_summaries.csv'
-header_data, df3 = read_adjusted_data(results_file3, jmcrs_data)
-results_file4 = 'Results_2023-01-13_Chase_summaries.csv'
-header_data, df4 = read_adjusted_data(results_file4, jmcrs_data)
-results_file5 = 'Results_2023-01-13_Leave_summaries.csv'
-header_data, df5 = read_adjusted_data(results_file5, jmcrs_data)
-results_file6 = 'Results_2023-01-13_Activity_1_summaries.csv'
-header_data, df6 = read_adjusted_data(results_file6, jmcrs_data)
-# Heuristic classifiers
-results_file7 = 'Results_2023-02-07_heuristic_approach_summaries.csv'
-header_data, df7 = read_adjusted_data(results_file7, jmcrs_data)
-results_file8 = 'Results_2023-02-07_heuristic_close_summaries.csv'
-header_data, df8 = read_adjusted_data(results_file8, jmcrs_data)
-results_file9 = 'Results_2023-02-07_heuristic_contact_summaries.csv'
-header_data, df9 = read_adjusted_data(results_file9, jmcrs_data)
-results_file10 = 'Results_2023-02-07_heuristic_nose_ear_summaries.csv'
-header_data, df10 = read_adjusted_data(results_file10, jmcrs_data)
-results_file11 = 'Results_2023-02-07_heuristic_nose_genital_summaries.csv'
-header_data, df11 = read_adjusted_data(results_file11, jmcrs_data)
-results_file12 = 'Results_2023-02-07_heuristic_nose_nose_summaries.csv'
-header_data, df12 = read_adjusted_data(results_file12, jmcrs_data)
+# Earlier social paper scans w/ heuristics and classifiers
+folder = '/media/bgeuther/Storage/TempStorage/B6-BTBR/results/'
+results_files = [folder + x for x in ['Results_2023-01-13_Nose_nose_summaries.csv', 'Results_2023-01-13_Nose_genital_summaries.csv', 'Results_2023-01-13_Chase_summaries.csv', 'Results_2023-01-13_Activity_1_summaries.csv', 'Results_2023-02-07_heuristic_approach_summaries.csv', 'Results_2023-02-07_heuristic_close_summaries.csv', 'Results_2023-02-07_heuristic_contact_summaries.csv', 'Results_2023-02-07_heuristic_nose_ear_summaries.csv', 'Results_2023-02-07_heuristic_nose_genital_summaries.csv', 'Results_2023-02-07_heuristic_nose_nose_summaries.csv']]
+
 # Filtering tests
-results_file12 = 'results/Results_2023-02-07_heuristic_nose_nose_summaries.csv'
-header_data, df12 = read_adjusted_data(results_file12, jmcrs_data)
-results_file13 = 'filtered_results/test_2023-02-13_highact_heuristic_nose_nose_summaries.csv'
-header_data, df13 = read_adjusted_data(results_file13, jmcrs_data)
-results_file14 = 'filtered_results/test_2023-02-13_medact_heuristic_nose_nose_summaries.csv' # Filtered by 5cm/s
-header_data, df14 = read_adjusted_data(results_file14, jmcrs_data)
-results_file15 = 'filtered_results/test_2023-02-13_heuristic_nose_nose_summaries.csv' # filtered by 2.5cm/s
-header_data, df15 = read_adjusted_data(results_file15, jmcrs_data)
-results_file16 = 'filtered_results/test_2023-02-13_medact_invover_heuristic_nose_nose_summaries.csv' # Filtered by 5cm/s
-header_data, df16 = read_adjusted_data(results_file16, jmcrs_data)
-# df = pd.concat([df, df2, df3, df4, df5, df6])
-df = pd.concat([df, df4, df5, df6])
-df2 = pd.concat([df2, df3])
-df3 = pd.concat([df7,df8,df9,df10,df11,df12])
-df4 = pd.concat([df12,df13,df14,df15,df16])
+# results_files = [
+# 	'results/Results_2023-02-07_heuristic_nose_nose_summaries.csv',
+# 	'filtered_results/test_2023-02-13_highact_heuristic_nose_nose_summaries.csv',
+# 	'filtered_results/test_2023-02-13_medact_heuristic_nose_nose_summaries.csv',
+# 	'filtered_results/test_2023-02-13_heuristic_nose_nose_summaries.csv',
+# 	'filtered_results/test_2023-02-13_medact_invover_heuristic_nose_nose_summaries.csv',
+# ]
+
+# Updated play results:
+# Located in 
+# folder = '/media/bgeuther/Storage/TempStorage/SocialPaper/Play/analysis-2023-07-20/'
+# results_files = [folder + x for x in ['Results_2023-08-24_Chase_summaries.csv', 'Results_2023-08-24_Jerk_summaries.csv']]
+
+# This inline loop reads in all the data from results_files.
+# Note that header data is discarded
+# header_data, df = read_adjusted_data(results_file, jmcrs_data)
+df = pd.concat([read_adjusted_data(x, jmcrs_data)[1] for x in results_files])
+
 
 (generate_time_vs_feature_plot(filter_experiment_time(df[df['Behavior']!='Activity > 2.5cm/s']), 'zt_time_hour', 'rel_time_behavior')+p9.facet_grid('Behavior~Room', scales='free_y')).draw().show()
 (generate_time_vs_feature_plot(filter_experiment_time(df[df['Behavior']=='Activity > 2.5cm/s']), 'zt_time_hour', 'behavior_dist')+p9.facet_grid('Behavior~Room', scales='free_y')).draw().show()
-(generate_time_vs_feature_plot(filter_experiment_time(df2), 'zt_time_hour', 'rel_time_behavior')+p9.facet_grid('Behavior~Room', scales='free_y')).draw().show()
+(generate_time_vs_feature_plot(filter_experiment_time(df), 'zt_time_hour', 'rel_time_behavior')+p9.facet_grid('Behavior~Room', scales='free_y')).draw().show()
 
-(generate_time_vs_feature_plot(filter_experiment_time(df4), 'zt_time_hour', 'bout_behavior', 'Behavior')+p9.facet_grid('Strain~Room', scales='free_y')).draw().show()
+(generate_time_vs_feature_plot(filter_experiment_time(df), 'zt_time_hour', 'bout_behavior', 'Behavior')+p9.facet_grid('Strain~Room', scales='free_y')).draw().show()
 
 # Plots for Vivek (re-generating Gautam's) for social paper/presentation
 # bars are SE
