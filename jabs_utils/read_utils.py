@@ -134,7 +134,7 @@ def read_activity_folder(folder: os.path, activity_threshold: float, interpolate
 			activity_dict[cur_file] = cur_activity
 		# Convert the raw activity into activity bouts
 		# Threshold the activity data
-		activity_behavior = (cur_activity > activity_threshold).astype(np.int)
+		activity_behavior = (cur_activity > activity_threshold).astype(np.int64)
 		activity_behavior[cur_activity<0] = -1
 		rle_data = []
 		for idx in np.arange(len(activity_behavior)):
