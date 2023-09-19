@@ -5,19 +5,18 @@ import plotnine as p9
 import time
 from datetime import datetime
 
-flist = np.loadtxt('juvenile_list.txt', dtype=str)
+folder = '/media/bgeuther/Storage/TempStorage/SocialPaper/Play/analysis-2023-07-20/juveniles/'
+flist = np.loadtxt(folder + 'juvenile_list.txt', dtype=str)
 df = pd.DataFrame({'fname': flist, 'dataset': 'juvenile'})
 
-flist2 = np.loadtxt('adult_male_list.txt', dtype=str)
+flist2 = np.loadtxt(folder + 'adult_male_list.txt', dtype=str)
 df = pd.concat([df, pd.DataFrame({'fname': flist2, 'dataset': 'adult_male'})]).reset_index(drop=True)
-flist2 = np.loadtxt('adult_female_list.txt', dtype=str)
+flist2 = np.loadtxt(folder + 'adult_female_list.txt', dtype=str)
 df = pd.concat([df, pd.DataFrame({'fname': flist2, 'dataset': 'adult_female'})]).reset_index(drop=True)
 
-for i,row in df.iterrows():
-    df.loc[i,'project'], df.loc[i,'computer'], df.loc[i,'exp_date'], df.loc[i,'pose'] = row['fname'].split('/')
-    df.loc[i,'exp'], df.loc[i,'day'], df.loc[i,'time'], _, _, df[
-    'pose_v'] = df.loc[i,'pose'].split('_')
-    df.loc[i,'hour'], df.loc[i,'minute'], df.loc[i,'second'] = df.loc[i,'time'].split('-')
+df['project'], df['computer'], df['exp_date'], df['pose'] = np.split(np.array([row['fname'].split('/') for _, row in df.iterrows()]), 4, axis=-1)
+df['exp'], df['day'], df['time'], _, _, df['pose_v'] = np.split(np.array([row['pose'].split('_') for _, row in df.iterrows()]), 6, axis=-1)
+df['hour'], df['minute'], df['second'] = np.split(np.array([row['time'].split('-') for _, row in df.iterrows()]), 3, axis=-1)
 
 # How uniform is the data loss?
 df.groupby(['dataset','exp']).apply(len)
@@ -86,7 +85,7 @@ df.groupby(['dataset','exp']).apply(len)
 # QA Reporting
 # This qa was generated via (run in the total log folder):
 # mlr --csv unsparsify *.csv > qa_2023-09-11.csv
-qa = pd.read_csv('qa_2023-09-11.csv')
+qa = pd.read_csv(folder + 'qa_2023-09-11.csv')
 # cloud fname only contains the last 4 slashes
 qa['fname'] = [re.sub('.*/([^/]*/[^/]*/[^/]*/[^/]*)$','\\1',x) for x in qa['video']]
 # Note that if a video was rerun, keep the last entry
