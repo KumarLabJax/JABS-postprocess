@@ -115,7 +115,7 @@ groupings = df.groupby(['exp','Strain','sex','dataset'])
 quality_df = groupings.agg({'avg_longtermid_count': np.mean, 'hour':len}).reset_index()
 
 # Set a really high bar of <6 hours in the 4-day experiment missing.
-low_count = quality_df['exp'][quality_df['hour'] < 90]
+low_count = quality_df['exp'][quality_df['hour'] < 90].to_list()
 
 def print_quality_subset_summary(quality_df, threshold):
     subset_df = quality_df[quality_df['avg_longtermid_count']>threshold]
@@ -123,6 +123,15 @@ def print_quality_subset_summary(quality_df, threshold):
     print(f'Experiments: {removed_df.to_list()}')
     print(f'Experiment removed count: {len(removed_df)}')
     print(subset_df.groupby(['Strain','sex','dataset']).apply(len).reset_index())
+    return removed_df.to_list()
 
-print_quality_subset_summary(quality_df, 2.75)
+low_quality = print_quality_subset_summary(quality_df, 2.5)
+low_quality_2 = print_quality_subset_summary(quality_df, 2.0)
 
+experiments_to_remove = np.unique(low_count + low_quality)
+experiments_to_remove_2 = np.unique(low_count + low_quality_2)
+
+# Save some useful outputs
+df['fname'].to_csv(folder + time.strftime('%Y-%m-%d') + '_poses.txt', header=False, index=False)
+np.savetxt(folder + time.strftime('%Y-%m-%d') + '_failed_qc.txt', experiments_to_remove, fmt='%s')
+np.savetxt(folder + time.strftime('%Y-%m-%d') + '_failed_qc_lenient.txt', experiments_to_remove_2, fmt='%s')
