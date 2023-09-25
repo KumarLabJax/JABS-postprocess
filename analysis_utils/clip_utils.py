@@ -26,15 +26,15 @@ def write_video_clip(in_vid_f: Union[str, Path], out_vid_f: Union[str, Path], cl
 		behavior_idxs: (Optional) If provided, will render a behavior indicator on the video. Must be same length as clip_idxs. If poses is also provided, must be of shape [frame, animal].
 		pose: (Optional) Pose to render on the video. Must be same length as clip_idxs. Must be of shape [frame, animal, 12, 2].
 	"""
-	if behavior_idxs:
+	if behavior_idxs is not None:
 		assert len(behavior_idxs) == len(clip_idxs)
-	if pose:
+	if pose is not None:
 		assert len(pose) == len(clip_idxs)
 		assert pose.ndim == 4
 		assert pose.shape[2] == 12
 		assert pose.shape[3] == 2
-		if behavior_idxs:
-			assert pose.shape[1] == behavior_idxs[1]
+		if behavior_idxs is not None:
+			assert pose.shape[1] == behavior_idxs.shape[1]
 
 	in_vid = imageio.get_reader(in_vid_f)
 	out_vid = imageio.get_writer(out_vid_f, fps=30, codec='mpeg4', quality=10)
@@ -44,11 +44,11 @@ def write_video_clip(in_vid_f: Union[str, Path], out_vid_f: Union[str, Path], cl
 			next_frame = in_vid.get_data(int(frame))
 		except IndexError:
 			continue
-		if behavior_idxs and pose:
+		if behavior_idxs is not None and pose is not None:
 			for cur_animal in range(pose.shape[1]):
 				pose_color = behaviour_colors[behavior_idxs[frame, cur_animal] > 0]
-				next_frame = render_pose(pose[frame, cur_animal], pose_color)
-		if behavior_idxs and not pose:
+				next_frame = render_pose(next_frame, pose[frame, cur_animal], pose_color)
+		if behavior_idxs is not None and not (pose is not None):
 			behavior_color = behaviour_colors[behavior_idxs[frame] > 0]
 			out_location = np.array(next_frame.shape[:2]) - behavior_block_width
 			out_location[0] /= 2
@@ -137,7 +137,7 @@ def render_pose(frame: np.ndarray[np.uint8], pose_kpts: np.ndarray, color: Tuple
 		color: The color to render the pose as
 	"""
 	assert pose_kpts.ndim == 2
-	assert pose_kpts.shape == [12, 2]
+	assert pose_kpts.shape == (12, 2)
 	assert frame.ndim == 3
 	keypoints_int = pose_kpts.astype(np.int64)
 	out_frame = np.copy(frame)
