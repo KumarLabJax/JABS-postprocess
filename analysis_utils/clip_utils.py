@@ -1,18 +1,31 @@
+# Utilities related to clipping and rendering data
+
 import imageio
 import h5py
 import cv2
 import os
 import numpy as np
-from typing import Optional, Tuple
+from typing import Optional, Union, Tuple, List
+from pathlib import Path
 import warnings
 
 # Approximately the bottom middle of an 800x800 frame
 # TODO: Have this location float based on the input video (currently will fail on a 480x480 video)
-behavior_indicator_idxs = (slice(750,775), slice(350,450), slice(None))
+behavior_indicator_idxs = (slice(750, 775), slice(350, 450), slice(None))
 
-# Basic helper function to write out video clip data
-# If behavior_idxs is provided, it writes a 2nd video with a a behavior status bar on the bottom
-def write_video_clip(in_vid_f, out_vid_f, clip_idxs, behavior_idxs=None):
+
+def write_video_clip(in_vid_f: Union[str, Path], out_vid_f: Union[str, Path], clip_idxs: Union[List, np.ndarray], behavior_idxs: Union[List, np.ndarray] = None):
+	"""Writes a clip of a video.
+
+	Args:
+		in_vid_f: Input video filename
+		out_vid_f: Output video filename
+		clip_idxs: List or array of frame indices to place in the clipped video. Frames not present in the video will be ignored without warnings. Must be castable to int.
+		behavior_idxs: (Optional) If provided, will render a second video with a behavior indicator. Must be same length as clip_idxs.
+	"""
+	if behavior_idxs:
+		assert len(behavior_idxs) == len(clip_idxs)
+
 	in_vid = imageio.get_reader(in_vid_f)
 	out_vid = imageio.get_writer(out_vid_f, fps=30, codec='mpeg4', quality=10)
 	out_behavior_vid = None
@@ -28,24 +41,31 @@ def write_video_clip(in_vid_f, out_vid_f, clip_idxs, behavior_idxs=None):
 		# Test to see if the video frame exists to read
 		try:
 			next_frame = in_vid.get_data(int(idx))
-		except:
-			break
+		except IndexError:
+			continue
 		out_vid.append_data(next_frame)
 		if out_behavior_vid is not None:
 			# Behavior is currently active
 			if np.isin(idx, behavior_idxs):
-				next_frame[behavior_indicator_idxs] = (77,175,74) # green
+				next_frame[behavior_indicator_idxs] = (77, 175, 74)  # green
 			# Behavior is not active
 			else:
-				next_frame[behavior_indicator_idxs] = (152,78,163) # purple
+				next_frame[behavior_indicator_idxs] = (152, 78, 163)  # purple
 			out_behavior_vid.append_data(next_frame)
 	in_vid.close()
 	out_vid.close()
 	if out_behavior_vid is not None:
 		out_behavior_vid.close()
 
-# Function that reads in and clips a pose file
-def write_pose_clip(in_pose_f, out_pose_f, clip_idxs):
+
+def write_pose_clip(in_pose_f: Union[str, Path], out_pose_f: Union[str, Path], clip_idxs: Union[List, np.ndarray]):
+	"""Writes a clip of a pose file.
+
+	Args:
+		in_pose_f: Input video filename
+		out_pose_f: Output video filename
+		clip_idxs: List or array of frame indices to place in the clipped video. Frames not present in the video will be ignored without warnings. Must be castable to int.
+	"""
 	# Extract the data that may have frames as the first dimension
 	all_data = {}
 	all_attrs = {}
@@ -77,7 +97,7 @@ def write_pose_clip(in_pose_f, out_pose_f, clip_idxs):
 		all_attrs['poseest'] = dict(in_f['poseest'].attrs.items())
 	# Write the data out
 	if os.path.exists(out_pose_f):
-		print('Warning: Overwriting pose file: ' + out_pose_f)
+		warnings.warn(f'Warning: Overwriting pose file: {out_pose_f}')
 	with h5py.File(out_pose_f, 'w') as out_f:
 		for key, data in all_data.items():
 			if all_compression_flags[key] is None:
@@ -102,16 +122,16 @@ def render_object(frame: np.ndarray[np.uint8], object_kpts: np.ndarray, color: T
 	keypoints_int = object_kpts.astype(np.int64)
 	out_frame = np.copy(frame)
 	for i in range(keypoints_int.shape[0]):
-		out_frame = cv2.circle(out_frame, (keypoints_int[i,0], keypoints_int[i,1]), 5, color)
-		if i < keypoints_int.shape[0]-1:
-			out_frame = cv2.line(out_frame, (keypoints_int[i,0], keypoints_int[i,1]), (keypoints_int[i+1,0], keypoints_int[i+1,1]), color)
+		out_frame = cv2.circle(out_frame, (keypoints_int[i, 0], keypoints_int[i, 1]), 5, color)
+		if i < keypoints_int.shape[0] - 1:
+			out_frame = cv2.line(out_frame, (keypoints_int[i, 0], keypoints_int[i, 1]), (keypoints_int[i + 1, 0], keypoints_int[i + 1, 1]), color)
 	return out_frame
 
 
 object_colors = {
-	'lixit':(55,126,184),		# Blue
-	'food_hopper':(255,127,0),	# Orange
-	'corners':(75,175,74),			# Green
+	'lixit': (55, 126, 184),		# Blue
+	'food_hopper': (255, 127, 0), 	# Orange
+	'corners': (75, 175, 74),		# Green
 }
 
 flipped_objects = [
@@ -151,6 +171,5 @@ def render_static_objects(video: str, pose: str, out_png: Optional[str] = None, 
 		if obj_name in object_colors.keys():
 			frame = render_object(frame, keypoints, object_colors[obj_name])
 		else:
-			frame = render_object(frame, keypoints, (255,255,255))
+			frame = render_object(frame, keypoints, (255, 255, 255))
 	imageio.imwrite(out_fname, frame)
-
