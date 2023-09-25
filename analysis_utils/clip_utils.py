@@ -1,7 +1,10 @@
 import imageio
 import h5py
+import cv2
 import os
 import numpy as np
+from typing import Optional, Tuple
+import warnings
 
 # Approximately the bottom middle of an 800x800 frame
 # TODO: Have this location float based on the input video (currently will fail on a 480x480 video)
@@ -84,3 +87,70 @@ def write_pose_clip(in_pose_f, out_pose_f, clip_idxs):
 		for key, attrs in all_attrs.items():
 			for cur_attr, data in attrs.items():
 				out_f[key].attrs.create(cur_attr, data)
+
+
+def render_object(frame: np.ndarray[np.uint8], object_kpts: np.ndarray, color: Tuple[np.uint8, np.uint8, np.uint8]):
+	"""Render a single object onto a frame.
+
+	Args:
+		frame: The frame to render the object on
+		object_kpts: An array of keypoints of shape [n_kpts, 2] where the second dimension is (x,y). Can be any numeric dtype
+		color: The color to render the object as
+	"""
+	assert object_kpts.ndim == 2
+	assert frame.ndim == 3
+	keypoints_int = object_kpts.astype(np.int64)
+	out_frame = np.copy(frame)
+	for i in range(keypoints_int.shape[0]):
+		out_frame = cv2.circle(out_frame, (keypoints_int[i,0], keypoints_int[i,1]), 5, color)
+		if i < keypoints_int.shape[0]-1:
+			out_frame = cv2.line(out_frame, (keypoints_int[i,0], keypoints_int[i,1]), (keypoints_int[i+1,0], keypoints_int[i+1,1]), color)
+	return out_frame
+
+
+object_colors = {
+	'lixit':(55,126,184),		# Blue
+	'food_hopper':(255,127,0),	# Orange
+	'corners':(75,175,74),			# Green
+}
+
+flipped_objects = [
+	'lixit',
+	'food_hopper',
+]
+
+
+def render_static_objects(video: str, pose: str, out_png: Optional[str] = None, frame_idx: int = 0):
+	"""Render all the static objects from a pose file onto a video.
+
+	Args:
+		video: filename of the video to retrieve a frame
+		pose: pose file to retrieve the static object data
+		out_png: (optional) output filename for the render. Defaults to <video>_static_objects.png
+		frame_idx: frame from the video to render. Defaults to 
+	"""
+	if out_png:
+		out_fname = out_png
+	else:
+		out_fname = os.path.splitext(video)[0] + '_static_objects.png'
+	vid_reader = imageio.get_reader(video)
+	frame = vid_reader.get_data(frame_idx)
+	static_obj_data = {}
+	with h5py.File(pose, 'r') as f:
+		if 'static_objects' not in f.keys():
+			raise ValueError(f'Static objects not present in {pose}')
+		obj_grp = f['static_objects']
+		keyed_objects = obj_grp.keys()
+		for cur_obj in keyed_objects:
+			static_obj_data[cur_obj] = obj_grp[cur_obj][:]
+	for obj_name, obj_kpts in static_obj_data.items():
+		if obj_name in flipped_objects:
+			keypoints = np.flip(obj_kpts, axis=-1)
+		else:
+			keypoints = obj_kpts
+		if obj_name in object_colors.keys():
+			frame = render_object(frame, keypoints, object_colors[obj_name])
+		else:
+			frame = render_object(frame, keypoints, (255,255,255))
+	imageio.imwrite(out_fname, frame)
+
