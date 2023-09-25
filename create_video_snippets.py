@@ -39,7 +39,8 @@ def main(argv):
 		end_frame = np.clip(row['start'] + row['duration'] + (args.pad_length), 0, None)
 		clip_idxs = np.arange(start_frame, end_frame)
 		if args.overlay_behavior:
-			behavior_idxs = np.arange(row['start'], row['start']+row['duration'])
+			behavior_idxs = np.zeros(clip_idxs.shape, dtype=np.uint8)
+			behavior_idxs[row['start']:row['start']+row['duration']] = 1
 			write_video_clip(in_vid_f=full_video_path, out_vid_f=out_vid_f, clip_idxs=clip_idxs, behavior_idxs=behavior_idxs)
 		else:
 			write_video_clip(in_vid_f=full_video_path, out_vid_f=out_vid_f, clip_idxs=clip_idxs)

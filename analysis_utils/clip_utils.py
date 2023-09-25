@@ -9,53 +9,53 @@ from typing import Optional, Union, Tuple, List
 from pathlib import Path
 import warnings
 
-# Approximately the bottom middle of an 800x800 frame
-# TODO: Have this location float based on the input video (currently will fail on a 480x480 video)
-behavior_indicator_idxs = (slice(750, 775), slice(350, 450), slice(None))
+behaviour_colors = [
+	(77, 175, 74),   # green
+	(152, 78, 163),  # purple
+]
+behavior_block_width = 25
 
 
-def write_video_clip(in_vid_f: Union[str, Path], out_vid_f: Union[str, Path], clip_idxs: Union[List, np.ndarray], behavior_idxs: Union[List, np.ndarray] = None):
+def write_video_clip(in_vid_f: Union[str, Path], out_vid_f: Union[str, Path], clip_idxs: Union[List, np.ndarray], behavior_idxs: Union[List, np.ndarray] = None, pose: Optional[np.ndarray] = None):
 	"""Writes a clip of a video.
 
 	Args:
-		in_vid_f: Input video filename
-		out_vid_f: Output video filename
+		in_vid_f: Input video filename.
+		out_vid_f: Output video filename.
 		clip_idxs: List or array of frame indices to place in the clipped video. Frames not present in the video will be ignored without warnings. Must be castable to int.
-		behavior_idxs: (Optional) If provided, will render a second video with a behavior indicator. Must be same length as clip_idxs.
+		behavior_idxs: (Optional) If provided, will render a behavior indicator on the video. Must be same length as clip_idxs. If poses is also provided, must be of shape [frame, animal].
+		pose: (Optional) Pose to render on the video. Must be same length as clip_idxs. Must be of shape [frame, animal, 12, 2].
 	"""
 	if behavior_idxs:
 		assert len(behavior_idxs) == len(clip_idxs)
+	if pose:
+		assert len(pose) == len(clip_idxs)
+		assert pose.ndim == 4
+		assert pose.shape[2] == 12
+		assert pose.shape[3] == 2
+		if behavior_idxs:
+			assert pose.shape[1] == behavior_idxs[1]
 
 	in_vid = imageio.get_reader(in_vid_f)
 	out_vid = imageio.get_writer(out_vid_f, fps=30, codec='mpeg4', quality=10)
-	out_behavior_vid = None
-	if behavior_idxs is not None:
-		behavior_vid_f = os.path.splitext(out_vid_f)[0] + '_behavior.avi'
-		# Don't overwrite the video if it already exists
-		if os.path.exists(behavior_vid_f):
-			print('Not overwriting behavior video: ' + behavior_vid_f)
-		else:
-			out_behavior_vid = imageio.get_writer(behavior_vid_f, fps=30, codec='mpeg4', quality=10)
 	# Copy the frames from the input into the output
-	for idx in clip_idxs:
-		# Test to see if the video frame exists to read
+	for frame in clip_idxs:
 		try:
-			next_frame = in_vid.get_data(int(idx))
+			next_frame = in_vid.get_data(int(frame))
 		except IndexError:
 			continue
+		if behavior_idxs and pose:
+			for cur_animal in range(pose.shape[1]):
+				pose_color = behaviour_colors[behavior_idxs[frame, cur_animal] > 0]
+				next_frame = render_pose(pose[frame, cur_animal], pose_color)
+		if behavior_idxs and not pose:
+			behavior_color = behaviour_colors[behavior_idxs[frame] > 0]
+			out_location = np.array(next_frame.shape[:2]) - behavior_block_width
+			out_location[0] /= 2
+			next_frame = cv2.circle(next_frame, tuple(out_location), behavior_block_width, behavior_color, -1)
 		out_vid.append_data(next_frame)
-		if out_behavior_vid is not None:
-			# Behavior is currently active
-			if np.isin(idx, behavior_idxs):
-				next_frame[behavior_indicator_idxs] = (77, 175, 74)  # green
-			# Behavior is not active
-			else:
-				next_frame[behavior_indicator_idxs] = (152, 78, 163)  # purple
-			out_behavior_vid.append_data(next_frame)
 	in_vid.close()
 	out_vid.close()
-	if out_behavior_vid is not None:
-		out_behavior_vid.close()
 
 
 def write_pose_clip(in_pose_f: Union[str, Path], out_pose_f: Union[str, Path], clip_idxs: Union[List, np.ndarray]):
@@ -107,6 +107,53 @@ def write_pose_clip(in_pose_f: Union[str, Path], out_pose_f: Union[str, Path], c
 		for key, attrs in all_attrs.items():
 			for cur_attr, data in attrs.items():
 				out_f[key].attrs.create(cur_attr, data)
+
+
+mouse_pose_lines = [
+	# spine
+	[0, 3],
+	[3, 6],
+	[6, 9],
+	[9, 10],
+	[10, 11],
+	# ears
+	[0, 1],
+	[0, 2],
+	# front paws
+	[6, 4],
+	[6, 5],
+	# rear paws
+	[9, 7],
+	[9, 8],
+]
+
+
+def render_pose(frame: np.ndarray[np.uint8], pose_kpts: np.ndarray, color: Tuple[np.uint8, np.uint8, np.uint8]) -> np.ndarray:
+	"""Renders a single 12-keypoint mouse pose onto a frame.
+
+	Args:
+		frame: The frame to render the pose on
+		pose_kpts: An array of shape [12, 2] for the mouse pose. Keypoint pairs that are (0,0) are considered not present and will not be rendered.
+		color: The color to render the pose as
+	"""
+	assert pose_kpts.ndim == 2
+	assert pose_kpts.shape == [12, 2]
+	assert frame.ndim == 3
+	keypoints_int = pose_kpts.astype(np.int64)
+	out_frame = np.copy(frame)
+	# Render the keypoints
+	for i in range(12):
+		kp = [keypoints_int[i, 0], keypoints_int[i, 1]]
+		if np.any(np.asarray(kp) != 0):
+			out_frame = cv2.circle(out_frame, tuple(kp), 3, color, -1)
+	# Render the lines
+	for connection in mouse_pose_lines:
+		kp1 = [keypoints_int[connection[0], 0], keypoints_int[connection[0], 1]]
+		kp2 = [keypoints_int[connection[1], 0], keypoints_int[connection[1], 1]]
+		# Don't render the line if either keypoints don't exist
+		if np.any(np.asarray(kp1) != 0) and np.any(np.asarray(kp2) != 0):
+			out_frame = cv2.line(out_frame, tuple(kp1), tuple(kp2), color, 2, cv2.LINE_AA)
+	return out_frame
 
 
 def render_object(frame: np.ndarray[np.uint8], object_kpts: np.ndarray, color: Tuple[np.uint8, np.uint8, np.uint8]):
