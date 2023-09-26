@@ -42,25 +42,25 @@ FLIPPED_OBJECTS = [
 ]
 
 
-def write_video_clip(in_vid_f: Union[str, Path], out_vid_f: Union[str, Path], clip_idxs: Union[List, np.ndarray], behavior_idxs: Union[List, np.ndarray] = None, pose: Optional[np.ndarray] = None):
+def write_video_clip(in_vid_f: Union[str, Path], out_vid_f: Union[str, Path], clip_idxs: Union[List, np.ndarray], behavior_data: Union[List, np.ndarray] = None, pose_data: Optional[np.ndarray] = None):
 	"""Writes a clip of a video.
 
 	Args:
 		in_vid_f: Input video filename.
 		out_vid_f: Output video filename.
 		clip_idxs: List or array of frame indices to place in the clipped video. Frames not present in the video will be ignored without warnings. Must be castable to int.
-		behavior_idxs: (Optional) If provided, will render a behavior indicator on the video. Must be same length as clip_idxs. If poses is also provided, must be of shape [frame, animal].
-		pose: (Optional) Pose to render on the video. Must be same length as clip_idxs. Must be of shape [frame, animal, 12, 2].
+		behavior_data: (Optional) If provided, will render a behavior indicator on the video. Must be same length as clip_idxs. If poses is also provided, must be of shape [frame, animal].
+		pose_data: (Optional) Pose to render on the video. Must be same length as clip_idxs. Must be of shape [frame, animal, 12, 2].
 	"""
-	if behavior_idxs is not None:
-		assert len(behavior_idxs) == len(clip_idxs)
-	if pose is not None:
-		assert len(pose) == len(clip_idxs)
-		assert pose.ndim == 4
-		assert pose.shape[2] == 12
-		assert pose.shape[3] == 2
-		if behavior_idxs is not None:
-			assert pose.shape[1] == behavior_idxs.shape[1]
+	if behavior_data is not None:
+		assert len(behavior_data) == len(clip_idxs)
+	if pose_data is not None:
+		assert len(pose_data) == len(clip_idxs)
+		assert pose_data.ndim == 4
+		assert pose_data.shape[2] == 12
+		assert pose_data.shape[3] == 2
+		if behavior_data is not None:
+			assert pose_data.shape[1] == behavior_data.shape[1]
 
 	in_vid = imageio.get_reader(in_vid_f)
 	out_vid = imageio.get_writer(out_vid_f, fps=30, codec='mpeg4', quality=10)
@@ -70,12 +70,12 @@ def write_video_clip(in_vid_f: Union[str, Path], out_vid_f: Union[str, Path], cl
 			next_frame = in_vid.get_data(int(frame))
 		except IndexError:
 			continue
-		if behavior_idxs is not None and pose is not None:
-			for cur_animal in range(pose.shape[1]):
-				pose_color = BEHAVIOR_COLORS[behavior_idxs[frame, cur_animal] > 0]
-				next_frame = render_pose(next_frame, pose[frame, cur_animal], pose_color)
-		if behavior_idxs is not None and not (pose is not None):
-			behavior_color = BEHAVIOR_COLORS[behavior_idxs[frame] > 0]
+		if behavior_data is not None and pose_data is not None:
+			for cur_animal in range(pose_data.shape[1]):
+				pose_color = BEHAVIOR_COLORS[behavior_data[frame, cur_animal] > 0]
+				next_frame = render_pose(next_frame, pose_data[frame, cur_animal], pose_color)
+		if behavior_data is not None and not (pose_data is not None):
+			behavior_color = BEHAVIOR_COLORS[np.any(behavior_data[frame] > 0)]
 			out_location = np.array(next_frame.shape[:2]) - BEHAVIOR_BLOCK_SIZE
 			out_location[0] /= 2
 			next_frame = cv2.circle(next_frame, tuple(out_location), BEHAVIOR_BLOCK_SIZE, behavior_color, -1)
