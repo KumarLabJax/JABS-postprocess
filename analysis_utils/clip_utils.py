@@ -65,17 +65,17 @@ def write_video_clip(in_vid_f: Union[str, Path], out_vid_f: Union[str, Path], cl
 	in_vid = imageio.get_reader(in_vid_f)
 	out_vid = imageio.get_writer(out_vid_f, fps=30, codec='mpeg4', quality=10)
 	# Copy the frames from the input into the output
-	for frame in clip_idxs:
+	for i, frame in enumerate(clip_idxs):
 		try:
 			next_frame = in_vid.get_data(int(frame))
 		except IndexError:
 			continue
 		if behavior_data is not None and pose_data is not None:
 			for cur_animal in range(pose_data.shape[1]):
-				pose_color = BEHAVIOR_COLORS[behavior_data[frame, cur_animal] > 0]
-				next_frame = render_pose(next_frame, pose_data[frame, cur_animal], pose_color)
+				pose_color = BEHAVIOR_COLORS[behavior_data[i, cur_animal] > 0]
+				next_frame = render_pose(next_frame, pose_data[i, cur_animal], pose_color)
 		if behavior_data is not None and not (pose_data is not None):
-			behavior_color = BEHAVIOR_COLORS[np.any(behavior_data[frame] > 0)]
+			behavior_color = BEHAVIOR_COLORS[np.any(behavior_data[i] > 0)]
 			out_location = np.array(next_frame.shape[:2]) - BEHAVIOR_BLOCK_SIZE
 			out_location[0] /= 2
 			next_frame = cv2.circle(next_frame, tuple(out_location), BEHAVIOR_BLOCK_SIZE, behavior_color, -1)
