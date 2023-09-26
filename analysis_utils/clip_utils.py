@@ -1,4 +1,4 @@
-# Utilities related to clipping and rendering data
+"""Utilities related to clipping and rendering data."""
 
 import imageio
 import h5py
@@ -9,11 +9,37 @@ from typing import Optional, Union, Tuple, List
 from pathlib import Path
 import warnings
 
-behaviour_colors = [
+BEHAVIOR_COLORS = [
 	(77, 175, 74),   # green
 	(152, 78, 163),  # purple
 ]
-behavior_block_width = 25
+BEHAVIOR_BLOCK_SIZE = 25
+MOUSE_POSE_LINES = [
+	# spine
+	[0, 3],
+	[3, 6],
+	[6, 9],
+	[9, 10],
+	[10, 11],
+	# ears
+	[0, 1],
+	[0, 2],
+	# front paws
+	[6, 4],
+	[6, 5],
+	# rear paws
+	[9, 7],
+	[9, 8],
+]
+OBJECT_COLORS = {
+	'lixit': (55, 126, 184),		# Blue
+	'food_hopper': (255, 127, 0), 	# Orange
+	'corners': (75, 175, 74),		# Green
+}
+FLIPPED_OBJECTS = [
+	'lixit',
+	'food_hopper',
+]
 
 
 def write_video_clip(in_vid_f: Union[str, Path], out_vid_f: Union[str, Path], clip_idxs: Union[List, np.ndarray], behavior_idxs: Union[List, np.ndarray] = None, pose: Optional[np.ndarray] = None):
@@ -46,13 +72,13 @@ def write_video_clip(in_vid_f: Union[str, Path], out_vid_f: Union[str, Path], cl
 			continue
 		if behavior_idxs is not None and pose is not None:
 			for cur_animal in range(pose.shape[1]):
-				pose_color = behaviour_colors[behavior_idxs[frame, cur_animal] > 0]
+				pose_color = BEHAVIOR_COLORS[behavior_idxs[frame, cur_animal] > 0]
 				next_frame = render_pose(next_frame, pose[frame, cur_animal], pose_color)
 		if behavior_idxs is not None and not (pose is not None):
-			behavior_color = behaviour_colors[behavior_idxs[frame] > 0]
-			out_location = np.array(next_frame.shape[:2]) - behavior_block_width
+			behavior_color = BEHAVIOR_COLORS[behavior_idxs[frame] > 0]
+			out_location = np.array(next_frame.shape[:2]) - BEHAVIOR_BLOCK_SIZE
 			out_location[0] /= 2
-			next_frame = cv2.circle(next_frame, tuple(out_location), behavior_block_width, behavior_color, -1)
+			next_frame = cv2.circle(next_frame, tuple(out_location), BEHAVIOR_BLOCK_SIZE, behavior_color, -1)
 		out_vid.append_data(next_frame)
 	in_vid.close()
 	out_vid.close()
@@ -109,25 +135,6 @@ def write_pose_clip(in_pose_f: Union[str, Path], out_pose_f: Union[str, Path], c
 				out_f[key].attrs.create(cur_attr, data)
 
 
-mouse_pose_lines = [
-	# spine
-	[0, 3],
-	[3, 6],
-	[6, 9],
-	[9, 10],
-	[10, 11],
-	# ears
-	[0, 1],
-	[0, 2],
-	# front paws
-	[6, 4],
-	[6, 5],
-	# rear paws
-	[9, 7],
-	[9, 8],
-]
-
-
 def render_pose(frame: np.ndarray[np.uint8], pose_kpts: np.ndarray, color: Tuple[np.uint8, np.uint8, np.uint8]) -> np.ndarray:
 	"""Renders a single 12-keypoint mouse pose onto a frame.
 
@@ -147,7 +154,7 @@ def render_pose(frame: np.ndarray[np.uint8], pose_kpts: np.ndarray, color: Tuple
 		if np.any(np.asarray(kp) != 0):
 			out_frame = cv2.circle(out_frame, tuple(kp), 3, color, -1)
 	# Render the lines
-	for connection in mouse_pose_lines:
+	for connection in MOUSE_POSE_LINES:
 		kp1 = [keypoints_int[connection[0], 0], keypoints_int[connection[0], 1]]
 		kp2 = [keypoints_int[connection[1], 0], keypoints_int[connection[1], 1]]
 		# Don't render the line if either keypoints don't exist
@@ -175,18 +182,6 @@ def render_object(frame: np.ndarray[np.uint8], object_kpts: np.ndarray, color: T
 	return out_frame
 
 
-object_colors = {
-	'lixit': (55, 126, 184),		# Blue
-	'food_hopper': (255, 127, 0), 	# Orange
-	'corners': (75, 175, 74),		# Green
-}
-
-flipped_objects = [
-	'lixit',
-	'food_hopper',
-]
-
-
 def render_static_objects(video: str, pose: str, out_png: Optional[str] = None, frame_idx: int = 0):
 	"""Render all the static objects from a pose file onto a video.
 
@@ -211,12 +206,12 @@ def render_static_objects(video: str, pose: str, out_png: Optional[str] = None, 
 		for cur_obj in keyed_objects:
 			static_obj_data[cur_obj] = obj_grp[cur_obj][:]
 	for obj_name, obj_kpts in static_obj_data.items():
-		if obj_name in flipped_objects:
+		if obj_name in FLIPPED_OBJECTS:
 			keypoints = np.flip(obj_kpts, axis=-1)
 		else:
 			keypoints = obj_kpts
-		if obj_name in object_colors.keys():
-			frame = render_object(frame, keypoints, object_colors[obj_name])
+		if obj_name in OBJECT_COLORS.keys():
+			frame = render_object(frame, keypoints, OBJECT_COLORS[obj_name])
 		else:
 			frame = render_object(frame, keypoints, (255, 255, 255))
 	imageio.imwrite(out_fname, frame)
