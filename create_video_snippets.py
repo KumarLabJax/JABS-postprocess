@@ -4,6 +4,7 @@ import argparse
 import sys
 import os
 from analysis_utils.clip_utils import write_video_clip
+from jabs_utils.read_utils import read_pose_file
 from typing import Union
 
 
@@ -73,13 +74,11 @@ def main(argv):
 
 	pose_data = None
 	if args.pose_file:
-		with h5py.File(args.pose_file, 'r') as f:
-			max_frames = f['poseest/points'].shape[0]
-			end_frame = np.clip(end_frame, 0, max_frames - 1)
-			pose_data = f['poseest/points'][start_frame:end_frame, ...]
-			# pose data is stored [y,x]
-			pose_data = np.flip(pose_data, axis=-1)
-
+		pose_data = read_pose_file(args.pose_file)
+		max_frames = pose_data.shape[0] + 1
+		end_frame = np.clip(end_frame, 0, max_frames - 1)
+		pose_data = pose_data[start_frame:end_frame]
+	
 	write_video_clip(args.input_video, args.output_video, range(start_frame, end_frame), behavior_data, pose_data)
 
 

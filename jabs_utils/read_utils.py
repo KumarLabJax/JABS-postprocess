@@ -217,6 +217,57 @@ def parse_activity(pose_file: os.path, smooth: int=0, forced_pose_v: int=None):
 	# Return the filled matrix transposed (distances stored as animal_id x frame)
 	return dists.T
 
+def read_pose_file(pose_file: os.path, force_version: int=None) -> np.ndarray:
+	"""Reads pose data from a pose file.
+
+	Args:
+		pose_file: The pose file to read
+		force_version: Ignore the version inside the pose file and retrieve the older version data. Forced version must be < version of file.
+
+	Returns:
+		numpy array of the pose data in shape [frame, animal, keypoint, 2]. Keypoints are x,y
+
+		Animal data returned is sorted by identity. Data without predictions stores 0,0 keypoints. Pose_v3 gets collapsed into pseudo-identities using the same approach that JABS uses.
+	"""
+	with h5py.File(pose_file, 'r') as f:
+		if 'version' in f['poseest'].attrs:
+			detected_pose_version = f['poseest'].attrs['version'][0]
+		else:
+			detected_pose_version = 2
+	if force_version:
+		if force_version == 2 and detected_pose_version != 2:
+			raise ValueError('Multi mouse files cannot be downgraded to single mouse pose for reading purposes.')
+		elif force_version > detected_pose_version:
+			raise ValueError(f'Reading version can only be a downgrade: file version: {detected_pose_version}, request version: {force_version}')
+		else:
+			detected_pose_version = force_version
+
+	# Single mouse poses
+	if detected_pose_version == 2:
+		with h5py.File(pose_file, 'r') as f:
+			pose_data = f['poseest/points'][:]
+		return np.flip(np.expand_dims(pose_data, axis=1), axis=-1)
+
+	# Multi mouse poses
+	if detected_pose_version == 3:
+		id_key = 'poseest/instance_track_id'
+		raise NotImplementedError('pose_v3 reading not implemented yet...')
+	elif detected_pose_version > 3:
+		id_key = 'poseest/instance_embed_id'
+
+	with h5py.File(pose_file, 'r') as f:
+		pose_data = f['poseest/points'][:]
+		animal_ids = f[id_key][:]
+		if detected_pose_version > 3:
+			max_valid_id = f['poseest/instance_id_center'].shape[0]
+			animal_ids[animal_ids > max_valid_id] = 0
+		id_mask = animal_ids == 0
+
+	# Sort by identity into a full matrix
+	sorted_pose_data = np.zeros([pose_data.shape[0], np.max(animal_ids), 12, 2], dtype=pose_data.dtype)
+	sorted_pose_data[np.where(id_mask == 0)[0], animal_ids[id_mask == 0] - 1, :, :] = pose_data[id_mask == 0, :, :]
+	return np.flip(sorted_pose_data, axis=-1)
+
 # Returns a center of a pose using the centroid of a convex hull
 def get_pose_center(pose: np.array):
 	tmp_pose = pose[np.all(pose!=0,axis=1),:]
