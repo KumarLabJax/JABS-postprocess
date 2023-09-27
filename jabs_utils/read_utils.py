@@ -106,14 +106,21 @@ def parse_jabs_annotations(file, behavior: str=None):
 		df_list = pd.DataFrame({'animal_idx':[], 'behavior':[], 'start':[], 'duration':[], 'is_behavior':[], 'video':[]})
 	return df_list
 
-# Reads in activity data into a matrix of shape [animal_idx, frame_idx] where each element contains the distance travelled in that frame
-# Negative values indicate that the mouse was not present to make a measurement
-# Smoothing indicates the number of frames to convolve an average (0 = no smoothing)
-# Distance is calculated by the pose version.
-# 	pose_v6 uses segmentation centroid motion
-# 	pose_v2-5 uses pose centroid motion (ignoring tail points)
-# Note that all_activity returned is NOT re-sorted by linking_dict (within-video ID -> within-experiment ID) and is still for an individual file.
-def read_activity_folder(folder: os.path, activity_threshold: float, interpolate_size: int, stitch_bouts: int, filter_bouts: int, smooth: int=0, forced_pose_v: int=None, linking_dict: dict=None, activity_dict: dict={}):
+
+def read_activity_folder(folder: os.path, activity_threshold: float, interpolate_size: int, stitch_bouts: int, filter_bouts: int, smooth: int = 0, forced_pose_v: int = None, linking_dict: dict = None, activity_dict: dict = {}):
+	"""Reads in all activity data for a given project folder.
+
+	Args:
+		folder: Project folder to read in data. Must be in a standard project format. See `get_poses_in_folder` for more details.
+		activity_threshold: Threshold in cm/s for calling an "active" bout
+		interpolate_size: Maximum frame gap to interpolate missing behavior calls (no pose)
+		stitch_bouts: Maximum frame gap of not-active to merge adjacent active calls
+		filter_bouts: Minimum frame duration of an active bout to be considered real
+		smooth: Smoothing window on calculation of distance travelled. 0 = no smoothing
+		forced_pose_v: Force activity to be calculated based on a specific pose version. v2-5 uses keypoint centroids. v6+ uses segmentation centroid.
+		linking_dict: Dictonary of cached identities from `link_identities`
+		activity_dict: Dictionary of cached activity data from `read_activity_folder`
+	"""
 	# Figure out what pose files exist
 	files_in_experiment = putils.get_poses_in_folder(folder)
 	all_predictions = []
@@ -136,8 +143,8 @@ def read_activity_folder(folder: os.path, activity_threshold: float, interpolate
 			activity_dict[cur_file] = cur_activity
 		# Convert the raw activity into activity bouts
 		# Threshold the activity data
-		activity_behavior = (cur_activity > activity_threshold).astype(np.int)
-		activity_behavior[cur_activity<0] = -1
+		activity_behavior = (cur_activity > activity_threshold).astype(np.int64)
+		activity_behavior[cur_activity < 0] = -1
 		rle_data = []
 		for idx in np.arange(len(activity_behavior)):
 			cur_starts, cur_durations, cur_values = rle(activity_behavior[idx])
@@ -150,7 +157,7 @@ def read_activity_folder(folder: os.path, activity_threshold: float, interpolate
 			# Filter out short predictions last
 			if filter_bouts > 0:
 				cur_starts, cur_durations, cur_values = filter_data(cur_starts, cur_durations, cur_values, max_gap_size=filter_bouts, values_to_remove=[1])
-			tmp_df = pd.DataFrame({'animal_idx':idx, 'start':cur_starts, 'duration':cur_durations, 'is_behavior':cur_values})
+			tmp_df = pd.DataFrame({'animal_idx': idx, 'start': cur_starts, 'duration': cur_durations, 'is_behavior': cur_values})
 			tmp_df['distance'] = get_bout_dists(cur_starts, cur_durations, cur_activity[idx])
 			rle_data.append(tmp_df)
 		rle_data = pd.concat(rle_data).reset_index(drop=True)
@@ -163,11 +170,11 @@ def read_activity_folder(folder: os.path, activity_threshold: float, interpolate
 	# Correct for identities across videos
 	if linking_dict is None:
 		linking_dict = link_identities(folder)
-	all_predictions['longterm_idx'] = [linking_dict[x][y] if x in linking_dict.keys() and y in linking_dict[x].keys() else -1 for x,y in zip(all_predictions['video_name'].values, all_predictions['animal_idx'])]
+	all_predictions['longterm_idx'] = [linking_dict[x][y] if x in linking_dict.keys() and y in linking_dict[x].keys() else -1 for x, y in zip(all_predictions['video_name'].values, all_predictions['animal_idx'])]
 	return all_predictions, linking_dict, activity_dict
 
 
-def parse_activity(pose_file: os.path, smooth: int=0, forced_pose_v: int=None):
+def parse_activity(pose_file: os.path, smooth: int = 0, forced_pose_v: int = None):
 	"""Reads in activity data for a single file.
 
 	Args:
@@ -194,15 +201,15 @@ def parse_activity(pose_file: os.path, smooth: int=0, forced_pose_v: int=None):
 		for frame in np.arange(len(pose_data)):
 			for cur_animal in range(pose_data.shape[1]):
 				# Ignore tail points for convex hull/center
-				center_data[frame, cur_animal - 1, :] = get_pose_center(pose_data[frame, cur_animal, :10, :])
+				center_data[frame, cur_animal, :] = get_pose_center(pose_data[frame, cur_animal, :10, :])
 	elif pose_v == 6:
 		raise NotImplementedError('Pose v6 distance not supported yet.')
 	else:
 		raise NotImplementedError('Pose version not detected for ' + str(pose_file) + ' (' + str(pose_v) + '). Cannot interpret data.')
 	# Mask out missing data before calculating gradients (distances)
-	center_data = np.ma.array(center_data, mask=np.tile(np.expand_dims(np.all(center_data==0, axis=2), axis=-1), [1,1,2]))
+	center_data = np.ma.array(center_data, mask=np.tile(np.expand_dims(np.all(center_data == 0, axis=2), axis=-1), [1, 1, 2]))
 	dists = np.gradient(center_data, axis=0)
-	dists = np.hypot(dists[:,:,0], dists[:,:,1])
+	dists = np.hypot(dists[:, :, 0], dists[:, :, 1])
 	# We need to fill the data before the smoothing because the convolve doesn't operate on masked arrays
 	# We happen to use a fill value of 0 to not corrupt actual distances in averages too badly
 	dists.fill_value = 0
@@ -213,7 +220,7 @@ def parse_activity(pose_file: os.path, smooth: int=0, forced_pose_v: int=None):
 		smoothed_dists = []
 		for animal_idx in np.arange(np.shape(dists)[1]):
 			# Mean smooth using convolve
-			smoothed_dists.append(scipy.signal.fftconvolve(dists[:,animal_idx], np.ones([smooth])/smooth, mode='same'))
+			smoothed_dists.append(scipy.signal.fftconvolve(dists[:, animal_idx], np.ones([smooth])/ smooth, mode='same'))
 		dists = np.stack(smoothed_dists, axis=1)
 	# Finally convert to pixel space
 	dists = dists * cm_per_px
@@ -316,7 +323,7 @@ def read_experiment_folder(folder: os.path, behavior: str, interpolate_size: int
 			predictions = parse_predictions(prediction_file, interpolate_size=interpolate_size, stitch_bouts=stitch_bouts, filter_bouts=filter_bouts)
 			# Add in distance traveled during bouts, if available
 			if cur_file in activity_dict.keys():
-				predictions['distance'] = 0
+				predictions['distance'] = 0.0
 				for idx in np.unique(predictions['animal_idx']):
 					if idx != -1:
 						rows_to_assign = predictions['animal_idx']==idx
