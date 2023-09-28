@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import os
 import re
+import pytz
 
 # Helper function to just read in a generic behavior table
 def read_postprocess_table(behavior_table: os.path):
@@ -15,7 +16,19 @@ def read_ltm_summary_table(behavior_table: os.path, jmcrs_metadata: os.path=None
 	header_data, df = read_postprocess_table(behavior_table)
 	# Format a bunch of the time data into a more meaningful format
 	# str -> datetime object (handling daylight savings)
-	df['time'] = pd.to_datetime(df['time']).dt.tz_localize(tz=timezone)
+	try:
+		df['time'] = pd.to_datetime(df['time']).dt.tz_localize(tz=timezone)
+	# delete out any times that were padded by generate_behavior_tables that actually never existed
+	except pytz.exceptions.NonExistentTimeError:
+		df['time'] = pd.to_datetime(df['time'])
+		bad_idxs = []
+		for idx, row in df.iterrows():
+			try:
+				_ = row['time'].tz_localize(tz=timezone)
+			except pytz.exceptions.NonExistentTimeError:
+				bad_idxs.append(idx)
+		df = df.drop(bad_idxs)
+		df['time'] = df['time'].dt.tz_localize(tz=timezone)
 	# Normalize experiment time to be relative to experiment starts
 	exp_starts = df.groupby('exp_prefix').agg({'time':min}).reset_index()
 	exp_starts.columns = ['exp_prefix','exp_start_time']
