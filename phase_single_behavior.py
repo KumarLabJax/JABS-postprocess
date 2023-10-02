@@ -3,10 +3,9 @@ import plotnine as p9
 import re
 import sys
 import numpy as np
-import scipy
 from itertools import chain
-from analysis_utils.parse_table import read_ltm_summary_table, filter_experiment_time
-from plotnine import *
+from analysis_utils.parse_table import read_ltm_summary_table
+from analysis_utils.circadian import to_fraction_str, make_phase_df
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots 
 import argparse
@@ -27,6 +26,7 @@ def main(argv):
     parser.add_argument('--filter_food_hopper', help='File containing experiments to filter out videos with food hopper problems', default=None)
     args = parser.parse_args()
     run_analysis(args)
+
 
 def run_analysis(args):
     #-------------------------------
@@ -50,93 +50,23 @@ def run_analysis(args):
         df = df[~np.isin(df['ExptNumber'], filter_out)]
 
     # Delete out bins where no data exists
-    no_data = np.all(df[['time_no_pred','time_not_behavior','time_behavior']]==0, axis=1)
+    no_data = np.all(df[['time_no_pred', 'time_not_behavior', 'time_behavior']] == 0, axis=1)
     df = df[~no_data].reset_index()
 
-    # Get the average bout length per hour in frames
-    df['avg_bout_length'] = df['time_behavior']/df['bout_behavior']
-
-    # Filter out one experiment over one day for poster plot
-    df["Unique_animal"] = df['longterm_idx'].astype(str) + df['ExptNumber']
-    df1 = df[np.isin(df['ExptNumber'], ["MDB0049", "MDB0015"])]
-    df1 = df1[df1['zt_exp_time'].dt.days == 3]
-
-    results_file_bouts = re.sub('_summaries', '_bouts', results_file)
-    df_bouts = pd.read_csv(results_file_bouts, skiprows=2)
-    df_bouts['time'] = pd.to_datetime(df_bouts['time'])
-    # Since this is hourly data, we can transform start and duration fields to actual timestamps
-    frame_to_s = 30
-    df_bouts['time_start'] = df_bouts['time'] + pd.to_timedelta(df_bouts['start']/frame_to_s, unit='s')
-    df_bouts['time_end'] = df_bouts['time'] + pd.to_timedelta(df_bouts['start']/frame_to_s, unit='s') + pd.to_timedelta(df_bouts['duration']/frame_to_s, unit='s')
-    df_bouts_behavior = df_bouts[df_bouts['is_behavior'] == 1]
-
-    if jmcrs_data is not None:
-        meta_df = pd.read_excel(jmcrs_data)
-        meta_df = meta_df[['ExptNumber','Sex','Strain','Location']].drop_duplicates()
-        meta_df['Room'] = [x.split(' ')[0] if isinstance(x,str) else ''  for x in meta_df['Location']]
-        meta_df['Computer'] = [re.sub('.*(NV[0-9]+).*','\\1',x) if isinstance(x,str) else ''  for x in meta_df['Location']]
-        # Note: If you want to drop rows that don't have metadata, change how='inner'
-        df_bouts_behavior = pd.merge(df_bouts_behavior, meta_df, left_on='exp_prefix', right_on='ExptNumber', how='left')
-
-    # Amplitude and Phase
-    # using FFT for Amplitude and phase information
-    # function for using fft to get the A and phase of the signals
-    def get_fft_amplitude_and_phase_scipy(data, fs):
-        N = 1024 # number of sample points
-        freq = scipy.fft.fftfreq(N, 1/fs)
-        fft_vals = scipy.fft.fft(data - np.mean(data), n=N) # Since the power of signal lies in the symmetric part of the fft spectrum, we consider only the positive half
-        mask = freq > 0
-        freq = freq[mask]
-        period = 1/freq
-        # calc the amplitude and phase
-        amplitude = np.abs(fft_vals[mask]) / N # abs(Y)/npts
-        phase = np.angle(fft_vals[mask]) # np.angle(Y) 
-        return freq, amplitude, phase, period
-
-    # Define the frequency sampling and cutoff frequency
-    fs = 1.0  # sampling frequency: 1 data point per hour
-    order = 5 # Order of the Butterworth filter
-    filtered_data_dict = {}
-    amplitude_phase_dict = {}
-
-    # removing the first and last video per experiment
-    df_new = df.groupby('Unique_animal').apply(lambda group: group.iloc[1:-1]).reset_index(drop=True)
-    # Removing experiments MDX0017 and MDX0005 because it has missing data
-    df_new = df_new[df_new['ExptNumber'] != 'MDX0017']
-    df_new = df_new[df_new['ExptNumber'] != 'MDX0005']
-    # per animal processing
-    for mouse in df_new['Unique_animal'].unique():
-        df_mouse = df_new[df_new['Unique_animal'] == mouse]
-        temp = pd.Series(data=df_mouse['bout_behavior'].values,index=df_mouse['relative_exp_time'].values)
-        temp = temp.fillna(method='bfill')
-        temp = temp.resample('H').sum()
-        if len(temp) > 3 * order:  # 3*order is the default padlen in scipy's filtfilt. so making sure that there are enough data points for the filtfilt function to work properly
-            freq, amplitude, phase, period = get_fft_amplitude_and_phase_scipy(temp.values, fs)
-            amplitude_phase_dict[mouse] = {'freq': freq, 'amplitude': amplitude, 'phase': phase, 'period': period, 'mouse': mouse, 'strain': np.unique(df_mouse['Strain'])[0]}
-        else:
-            print(f'Skipping mouse {mouse} due to insufficient data points.')
-            
-    phase_df = pd.DataFrame.from_dict(amplitude_phase_dict, orient='index')
-
+    phase_df = make_phase_df(df, 'bout_behavior', trim_start=1, trim_end=1)
 
     #=== THIS PLOT SHOWS THE DOMINANT AMPLITUDE ===#
 
     # Plot the frequencies and the resulting amplitudes from the fft 
-    def to_fraction(x):
-        if x[0] == 0: 
-            return 0
-        else: 
-            return '{}/{}'.format(x[0], x[1])
-
-    plot_df = phase_df.explode(['freq', 'amplitude', 'phase', 'period'])
-    plot_df[['freq', 'amplitude', 'phase', 'period']] = plot_df[['freq', 'amplitude', 'phase', 'period']].astype(float)
-    (ggplot(plot_df, aes(x='freq', y='amplitude', group='mouse')) + 
-            geom_line(alpha = 0.15, color=BLUE) + 
-            theme_bw() + 
-            labs(title='Eating Circadian Power Spectral Density', x='Frequency', y='Amplitude') + 
-            theme(title = element_text(hjust = 0.5)) + 
-            scale_x_continuous(labels=list(map(to_fraction, [(0,0), (1,24), (1,12), (1,8), (1,6), (5,24), (1,4), (7,24), (1,3), (3,8), (5,12)])), breaks=[0, 1/24, 1/12, 1/8, 1/6, 5/24, 1/4, 7/24, 1/3, 3/8, 5/12]) + 
-            coord_cartesian(xlim=(0, 5/12))).save('freq_amp.png')
+    (
+        p9.ggplot(phase_df, p9.aes(x='freq', y='amplitude', group='group')) 
+        + p9.geom_line(alpha=0.15, color=BLUE)
+        + p9.theme_bw()
+        + p9.labs(title='Eating Circadian Power Spectral Density', x='Frequency', y='Amplitude')
+        + p9.theme(title=p9.element_text(hjust=0.5))
+        + p9.scale_x_continuous(labels=list(map(to_fraction_str, [(0, 0), (1, 24), (1, 12), (1, 8), (1, 6), (5, 24), (1, 4), (7, 24), (1, 3), (3, 8), (5, 12)])), breaks=[0, 1 / 24, 1 / 12, 1 / 8, 1 / 6, 5 / 24, 1 / 4, 7 / 24, 1 / 3, 3 / 8, 5 / 12])
+        + p9.coord_cartesian(xlim=(0, 5 / 12))
+    ).save('freq_amp.png')
 
     #Filter out the frequencies below or above the allowed range
     filtered_phase_df = phase_df
