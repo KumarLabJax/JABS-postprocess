@@ -24,7 +24,7 @@ def main(argv):
     parser = argparse.ArgumentParser(description="Compares the circadian phase FFT analysis for two behaviors")
     parser.add_argument('--first_behavior', help='Name of First Behavior', required=True)
     parser.add_argument('--second_behavior', help='Name of Second Behavior', required=True)
-    parser.add_argument('--first_results', help='Path to the results file conatining prediction data for the first behavior', required=True)
+    parser.add_argument('--first_results', help='Path to the results file containing prediction data for the first behavior', required=True)
     parser.add_argument('--second_results', help='Path to the results file containing prediction data for the second behavior', required=True)
     parser.add_argument('--jmcrs_data', help='Path to the metadata for the mouse experiments', required=True)
     # TODO: Should change default to None once the list Cayson used gets a more permanent spot...
