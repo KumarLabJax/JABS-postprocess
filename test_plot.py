@@ -2,6 +2,7 @@ import pandas as pd
 import plotnine as p9
 import re
 import numpy as np
+import mizani
 
 from analysis_utils.parse_table import read_ltm_summary_table, filter_experiment_time
 from analysis_utils.plots import generate_time_vs_feature_plot
@@ -31,7 +32,7 @@ df['Strain+Room'] = df['Strain'] + ' ' + df['Room']
 generate_time_vs_feature_plot(filter_experiment_time(df), 'zt_time_hour', 'bout_behavior', 'Strain+Room', title=header_data['Behavior'][0]).draw().show()
 
 # Check the mean of data after first day (midnight)
-filter_experiment_time(df).groupby('Strain').agg({'rel_time_behavior':np.mean})
+filter_experiment_time(df).groupby('Strain')['rel_time_behavior'].mean()
 
 # Read in more behaviors to make an aggregate graph
 # This is stretching the limits of the function capability. Facets don't work too well. Nonetheless, plot room by behavior predictions

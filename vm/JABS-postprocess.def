@@ -1,5 +1,5 @@
 Bootstrap: docker
-From: python:3.9-slim-bullseye
+From: python:3.10-slim-bullseye
 
 
 %setup
