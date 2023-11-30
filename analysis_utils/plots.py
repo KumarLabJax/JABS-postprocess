@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import plotnine as p9
-import mizani
+from mizani import formatters
 
 # Plotnine plot objects, which are returned here can be modified, plotted (blocking), plotted (non-blocking), or saved directly to disk as a figure (png or svg)
 # New layers can be added to an existing plot through the + operator
@@ -16,7 +16,7 @@ def generate_time_vs_feature_plot(df: pd.DataFrame, time: str='zt_time_hour', fe
 	# Detect the time datatype
 	col_types = df.dtypes
 	df_copy = pd.DataFrame.copy(df)
-	if not pd.api.types.is_categorical_dtype(col_types[factor]):
+	if isinstance(col_types[factor], pd.Categorical):
 		df_copy[factor] = df_copy[factor].astype('category')
 	# Make a custom df for the lights block
 	light_df = df.groupby([time,factor])[[feature,'lights_on']].mean().reset_index()
@@ -42,7 +42,7 @@ def generate_time_vs_feature_plot(df: pd.DataFrame, time: str='zt_time_hour', fe
 		plot = plot + p9.theme(axis_text_x=p9.element_text(rotation=90, hjust=0.5))
 	# Timedelta, rotate and force breaks to hour format
 	elif pd.api.types.is_timedelta64_dtype(col_types[time]) or pd.api.types.is_timedelta64_ns_dtype(col_types[time]):
-		plot = plot + p9.theme(axis_text_x=p9.element_text(rotation=90, hjust=0.5)) + p9.scale_x_timedelta(labels=mizani.formatters.timedelta_format('h'))
+		plot = plot + p9.theme(axis_text_x=p9.element_text(rotation=90, hjust=0.5)) + p9.scale_x_timedelta(labels=formatters.timedelta_format('h'))
 		# breaks=mizani.breaks.timedelta_breaks(n_breaks)
 	# 
 	if title is not None:

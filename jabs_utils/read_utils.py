@@ -12,13 +12,15 @@ import cv2
 import jabs_utils.project_utils as putils
 from jabs_utils.bout_utils import rle, filter_data, get_bout_dists
 
+from typing import Tuple
+
 # Reads in a single file and returns a dataframe of events
 # threshold should only be adjusted if you know what you're doing (most ML classifiers expect to be using a 0.5 threshold)
 # stitch_bouts is the length of a gap to merge
 # filter_bouts is the minimum length of a bout to keep
 # trim_time allows the user to read only in a portion of the data (Default of none for reading in all data)
 # Note that we carry forward the "pose missing" and "not behavior" events alongside the "behavior" events
-def parse_predictions(pred_file: os.path, threshold_min: float=0.5, threshold_max=1.0, interpolate_size: int=0, stitch_bouts: int=0, filter_bouts: int=0, trim_time: tuple[int, int]=None):
+def parse_predictions(pred_file: os.path, threshold_min: float=0.5, threshold_max=1.0, interpolate_size: int=0, stitch_bouts: int=0, filter_bouts: int=0, trim_time: Tuple[int, int]=None):
 	# Read in the raw data
 	with h5py.File(pred_file, 'r') as f:
 		data = f['predictions/predicted_class'][:]
@@ -104,14 +106,21 @@ def parse_jabs_annotations(file, behavior: str=None):
 		df_list = pd.DataFrame({'animal_idx':[], 'behavior':[], 'start':[], 'duration':[], 'is_behavior':[], 'video':[]})
 	return df_list
 
-# Reads in activity data into a matrix of shape [animal_idx, frame_idx] where each element contains the distance travelled in that frame
-# Negative values indicate that the mouse was not present to make a measurement
-# Smoothing indicates the number of frames to convolve an average (0 = no smoothing)
-# Distance is calculated by the pose version.
-# 	pose_v6 uses segmentation centroid motion
-# 	pose_v2-5 uses pose centroid motion (ignoring tail points)
-# Note that all_activity returned is NOT re-sorted by linking_dict (within-video ID -> within-experiment ID) and is still for an individual file.
-def read_activity_folder(folder: os.path, activity_threshold: float, interpolate_size: int, stitch_bouts: int, filter_bouts: int, smooth: int=0, forced_pose_v: int=None, linking_dict: dict=None, activity_dict: dict={}):
+
+def read_activity_folder(folder: os.path, activity_threshold: float, interpolate_size: int, stitch_bouts: int, filter_bouts: int, smooth: int = 0, forced_pose_v: int = None, linking_dict: dict = None, activity_dict: dict = {}):
+	"""Reads in all activity data for a given project folder.
+
+	Args:
+		folder: Project folder to read in data. Must be in a standard project format. See `get_poses_in_folder` for more details.
+		activity_threshold: Threshold in cm/s for calling an "active" bout
+		interpolate_size: Maximum frame gap to interpolate missing behavior calls (no pose)
+		stitch_bouts: Maximum frame gap of not-active to merge adjacent active calls
+		filter_bouts: Minimum frame duration of an active bout to be considered real
+		smooth: Smoothing window on calculation of distance travelled. 0 = no smoothing
+		forced_pose_v: Force activity to be calculated based on a specific pose version. v2-5 uses keypoint centroids. v6+ uses segmentation centroid.
+		linking_dict: Dictonary of cached identities from `link_identities`
+		activity_dict: Dictionary of cached activity data from `read_activity_folder`
+	"""
 	# Figure out what pose files exist
 	files_in_experiment = putils.get_poses_in_folder(folder)
 	all_predictions = []
@@ -134,8 +143,8 @@ def read_activity_folder(folder: os.path, activity_threshold: float, interpolate
 			activity_dict[cur_file] = cur_activity
 		# Convert the raw activity into activity bouts
 		# Threshold the activity data
-		activity_behavior = (cur_activity > activity_threshold).astype(np.int)
-		activity_behavior[cur_activity<0] = -1
+		activity_behavior = (cur_activity > activity_threshold).astype(np.int64)
+		activity_behavior[cur_activity < 0] = -1
 		rle_data = []
 		for idx in np.arange(len(activity_behavior)):
 			cur_starts, cur_durations, cur_values = rle(activity_behavior[idx])
@@ -148,7 +157,7 @@ def read_activity_folder(folder: os.path, activity_threshold: float, interpolate
 			# Filter out short predictions last
 			if filter_bouts > 0:
 				cur_starts, cur_durations, cur_values = filter_data(cur_starts, cur_durations, cur_values, max_gap_size=filter_bouts, values_to_remove=[1])
-			tmp_df = pd.DataFrame({'animal_idx':idx, 'start':cur_starts, 'duration':cur_durations, 'is_behavior':cur_values})
+			tmp_df = pd.DataFrame({'animal_idx': idx, 'start': cur_starts, 'duration': cur_durations, 'is_behavior': cur_values})
 			tmp_df['distance'] = get_bout_dists(cur_starts, cur_durations, cur_activity[idx])
 			rle_data.append(tmp_df)
 		rle_data = pd.concat(rle_data).reset_index(drop=True)
@@ -161,43 +170,46 @@ def read_activity_folder(folder: os.path, activity_threshold: float, interpolate
 	# Correct for identities across videos
 	if linking_dict is None:
 		linking_dict = link_identities(folder)
-	all_predictions['longterm_idx'] = [linking_dict[x][y] if x in linking_dict.keys() and y in linking_dict[x].keys() else -1 for x,y in zip(all_predictions['video_name'].values, all_predictions['animal_idx'])]
+	all_predictions['longterm_idx'] = [linking_dict[x][y] if x in linking_dict.keys() and y in linking_dict[x].keys() else -1 for x, y in zip(all_predictions['video_name'].values, all_predictions['animal_idx'])]
 	return all_predictions, linking_dict, activity_dict
 
-# Reads in activity data for a single file
-def parse_activity(pose_file: os.path, smooth: int=0, forced_pose_v: int=None):
+
+def parse_activity(pose_file: os.path, smooth: int = 0, forced_pose_v: int = None):
+	"""Reads in activity data for a single file.
+
+	Args:
+		pose_file: file to read in activity from
+		smooth: smoothing window
+		forced_pose_v: optional pose version to downgrade to
+	"""
 	pose_v = putils.get_pose_v(pose_file)
 	if forced_pose_v is not None:
 		assert pose_v >= forced_pose_v
 		pose_v = forced_pose_v
-	# Read in the data to produce a center_data variable which is of shape [n_frame, n_animal, 2] containing all [x,y] centers
-	if pose_v == 2 or pose_v == 3:
-		raise NotImplementedError('Pose v2 and v3 distance not supported yet.')
-	elif pose_v == 4 or pose_v == 5:
-		with h5py.File(pose_file, 'r') as f:
-			pose_data = f['poseest/points'][:,:,:10,:]
-			animal_ids = f['poseest/instance_embed_id'][:]
+
+	with h5py.File(pose_file, 'r') as f:
+		if 'cm_per_pixel' in f['poseest'].attrs:
 			cm_per_px = f['poseest'].attrs['cm_per_pixel']
-		animals = np.unique(animal_ids)
-		animals = animals[animals!=0]
-		if len(animals)==0:
-			raise ValueError('Pose v5 didn\'t have any animals to calculate distance')
-		center_data = np.zeros([pose_data.shape[0], max(animals), 2])
+		else:
+			raise ValueError('Activity cannot be calculated without cm_per_px value')
+	# Read in the data to produce a center_data variable which is of shape [n_frame, n_animal, 2] containing all [x,y] centers
+	if pose_v < 6:
+		pose_data = read_pose_file(pose_file, forced_pose_v)
+		if pose_data.shape[1] == 0:
+			raise ValueError('Pose file didn\'t have any animals to calculate distance')
+		center_data = np.zeros([pose_data.shape[0], pose_data.shape[1], 2])
 		for frame in np.arange(len(pose_data)):
-			for i, cur_animal in enumerate(animal_ids[frame]):
-				# Skip calculations for animals not assigned an ID
-				if cur_animal == 0:
-					pass
-				else:
-					center_data[frame,cur_animal-1,:] = get_pose_center(pose_data[frame,i])
+			for cur_animal in range(pose_data.shape[1]):
+				# Ignore tail points for convex hull/center
+				center_data[frame, cur_animal, :] = get_pose_center(pose_data[frame, cur_animal, :10, :])
 	elif pose_v == 6:
 		raise NotImplementedError('Pose v6 distance not supported yet.')
 	else:
 		raise NotImplementedError('Pose version not detected for ' + str(pose_file) + ' (' + str(pose_v) + '). Cannot interpret data.')
 	# Mask out missing data before calculating gradients (distances)
-	center_data = np.ma.array(center_data, mask=np.tile(np.expand_dims(np.all(center_data==0, axis=2), axis=-1), [1,1,2]))
+	center_data = np.ma.array(center_data, mask=np.tile(np.expand_dims(np.all(center_data == 0, axis=2), axis=-1), [1, 1, 2]))
 	dists = np.gradient(center_data, axis=0)
-	dists = np.hypot(dists[:,:,0], dists[:,:,1])
+	dists = np.hypot(dists[:, :, 0], dists[:, :, 1])
 	# We need to fill the data before the smoothing because the convolve doesn't operate on masked arrays
 	# We happen to use a fill value of 0 to not corrupt actual distances in averages too badly
 	dists.fill_value = 0
@@ -208,7 +220,7 @@ def parse_activity(pose_file: os.path, smooth: int=0, forced_pose_v: int=None):
 		smoothed_dists = []
 		for animal_idx in np.arange(np.shape(dists)[1]):
 			# Mean smooth using convolve
-			smoothed_dists.append(scipy.signal.fftconvolve(dists[:,animal_idx], np.ones([smooth])/smooth, mode='same'))
+			smoothed_dists.append(scipy.signal.fftconvolve(dists[:, animal_idx], np.ones([smooth])/ smooth, mode='same'))
 		dists = np.stack(smoothed_dists, axis=1)
 	# Finally convert to pixel space
 	dists = dists * cm_per_px
@@ -217,16 +229,74 @@ def parse_activity(pose_file: os.path, smooth: int=0, forced_pose_v: int=None):
 	# Return the filled matrix transposed (distances stored as animal_id x frame)
 	return dists.T
 
-# Returns a center of a pose using the centroid of a convex hull
-def get_pose_center(pose: np.array):
-	tmp_pose = pose[np.all(pose!=0,axis=1),:]
-	if len(tmp_pose)>3:
+
+def read_pose_file(pose_file: os.path, force_version: int=None) -> np.ndarray:
+	"""Reads pose data from a pose file.
+
+	Args:
+		pose_file: The pose file to read
+		force_version: Ignore the version inside the pose file and retrieve the older version data. Forced version must be < version of file.
+
+	Returns:
+		numpy array of the pose data in shape [frame, animal, keypoint, 2]. Keypoints are x,y and are in pixel units
+
+		Animal data returned is sorted by identity. Data without predictions stores 0,0 keypoints. Pose_v3 gets collapsed into pseudo-identities using the same approach that JABS uses.
+	"""
+	with h5py.File(pose_file, 'r') as f:
+		if 'version' in f['poseest'].attrs:
+			detected_pose_version = f['poseest'].attrs['version'][0]
+		else:
+			detected_pose_version = 2
+	if force_version:
+		if force_version == 2 and detected_pose_version != 2:
+			raise ValueError('Multi mouse files cannot be downgraded to single mouse pose for reading purposes.')
+		elif force_version > detected_pose_version:
+			raise ValueError(f'Reading version can only be a downgrade: file version: {detected_pose_version}, request version: {force_version}')
+		else:
+			detected_pose_version = force_version
+
+	# Single mouse poses
+	if detected_pose_version == 2:
+		with h5py.File(pose_file, 'r') as f:
+			pose_data = f['poseest/points'][:]
+		return np.flip(np.expand_dims(pose_data, axis=1), axis=-1)
+
+	# Multi mouse poses
+	if detected_pose_version == 3:
+		id_key = 'poseest/instance_track_id'
+		raise NotImplementedError('pose_v3 reading not implemented yet...')
+	elif detected_pose_version > 3:
+		id_key = 'poseest/instance_embed_id'
+
+	with h5py.File(pose_file, 'r') as f:
+		pose_data = f['poseest/points'][:]
+		animal_ids = f[id_key][:]
+		if detected_pose_version > 3:
+			max_valid_id = f['poseest/instance_id_center'].shape[0]
+			animal_ids[animal_ids > max_valid_id] = 0
+		id_mask = animal_ids == 0
+
+	# Sort by identity into a full matrix
+	sorted_pose_data = np.zeros([pose_data.shape[0], np.max(animal_ids), 12, 2], dtype=pose_data.dtype)
+	sorted_pose_data[np.where(id_mask == 0)[0], animal_ids[id_mask == 0] - 1, :, :] = pose_data[id_mask == 0, :, :]
+	return np.flip(sorted_pose_data, axis=-1)
+
+
+def get_pose_center(pose: np.array) -> np.ndarray:
+	"""Returns a center of pose using the centroid of a convex hull.
+
+	Args:
+		pose: a pose for a single mouse in a single frame. shape of [12, 2]. Any keypoints at location 0,0 are assumed "no prediction
+	"""
+	tmp_pose = pose[np.all(pose != 0, axis=1), :]
+	if len(tmp_pose) > 3:
 		convex_hull = cv2.convexHull(tmp_pose.astype(np.float32))
 		moments = cv2.moments(convex_hull)
 		# If the area is 0, return a default value
 		if moments['m00'] == 0:
 			return np.array([0,0])
 		return np.array([moments['m10']/moments['m00'], moments['m01']/moments['m00']])
+	# If we have 1-2 keypoints, just average them.
 	elif len(tmp_pose)>0:
 		return np.mean(tmp_pose, axis=0)
 	else:
@@ -253,7 +323,7 @@ def read_experiment_folder(folder: os.path, behavior: str, interpolate_size: int
 			predictions = parse_predictions(prediction_file, interpolate_size=interpolate_size, stitch_bouts=stitch_bouts, filter_bouts=filter_bouts)
 			# Add in distance traveled during bouts, if available
 			if cur_file in activity_dict.keys():
-				predictions['distance'] = 0
+				predictions['distance'] = 0.0
 				for idx in np.unique(predictions['animal_idx']):
 					if idx != -1:
 						rows_to_assign = predictions['animal_idx']==idx
