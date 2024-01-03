@@ -2,7 +2,6 @@
 
 import pandas as pd
 import plotnine as p9
-import re
 import os
 import sys
 import numpy as np
@@ -12,7 +11,7 @@ import jabs_utils.read_utils as rutils
 import jabs_utils.project_utils as putils
 import analysis_utils.gt_utils as gutils
 from jabs_utils.bout_utils import rle, filter_data
-
+# from compare_gt import generate_iou_scan, read_annotation_dataframe
 
 def evaluate_ground_truth(args):
     """Main function for evaluating ground truth annotations against classifier predictions.
@@ -25,11 +24,45 @@ def evaluate_ground_truth(args):
     else:
         raise NotImplementedError('Classifying using a classifier not currently implemented. Please use --prediction_folder instead.')
 
-    performance_df = generate_iou_scan(all_annotations, args.stitch_scan, args.filter_scan, args.filter_ground_truth)
+    performance_df = generate_iou_scan(all_annotations, args.stitch_scan, args.filter_scan, args.iou_thresholds, args.filter_ground_truth)
     melted_df = pd.melt(performance_df, id_vars=["behavior", "threshold", "stitch", "filter"])
 
     # Get the best f1 score filtering parameters for each thresholds
-    performance_df.groupby(['behavior', 'threshold']).apply(lambda x: x.iloc[np.nanargmax(x['f1'].values)] if np.any(~np.isnan(x['f1'].values)) else x.iloc[0]).reset_index(drop=True)
+    # optimal_filter_df = performance_df.groupby(['behavior', 'threshold']).apply(lambda x: x.iloc[np.nanargmax(x['f1'].values)] if np.any(~np.isnan(x['f1'].values)) else x.iloc[0]).reset_index(drop=True)
+
+    # Prototyping plot to show the relationship between threshold and optimal parameters
+    # filter_selection_plot = (
+    #     p9.ggplot(optimal_filter_df)
+    #     + p9.geom_point(p9.aes(x='threshold', y='f1'), color='red')
+    #     + p9.geom_point(p9.aes(x='threshold', y='stitch/np.max(stitch)'), color='blue')
+    #     + p9.geom_point(p9.aes(x='threshold', y='filter/np.max(filter)'), color='green')
+    #     + p9.facet_wrap('~behavior')
+    #     + p9.theme_bw()
+    # )
+
+    middle_threshold = np.sort(args.iou_thresholds)[int(np.floor(len(args.iou_thresholds)/2))]
+
+    (
+        p9.ggplot(performance_df[performance_df['threshold'] == middle_threshold])
+        + p9.geom_tile(p9.aes(x='stitch', y='filter', fill='f1'))
+        + p9.geom_text(p9.aes(x='stitch', y='filter', label='np.round(f1, 2)'), color='black', size=2)
+        # Obtain the highest F1 score to highlight it
+        + p9.geom_point(performance_df[performance_df['threshold'] == middle_threshold].groupby(['behavior']).apply(lambda x: x.iloc[np.nanargmax(x['f1'].values)]), p9.aes(x='stitch', y='filter'), shape='*', size=3, fill='#ffffff00')
+        + p9.facet_wrap('~behavior')
+        + p9.theme_bw()
+        + p9.labs(title=f'Performance at {middle_threshold} IoU')
+    ).save(args.scan_output, height=6, width=12, dpi=300)
+
+    winning_filters = performance_df[performance_df['threshold'] == middle_threshold].groupby(['behavior']).apply(lambda x: x.iloc[np.nanargmax(x['f1'].values)] if np.any(~np.isnan(x['f1'].values)) else x.iloc[0]).reset_index(drop=True)[['behavior', 'stitch', 'filter']]
+
+    melted_winning = pd.concat([melted_df[(melted_df[['behavior', 'stitch', 'filter']] == row).all(axis='columns')] for _, row in winning_filters.iterrows()])
+
+    (
+        p9.ggplot(melted_winning[melted_winning['variable'].isin(['pr', 're', 'f1'])], p9.aes(x='threshold', y='value', color='variable'))
+        + p9.geom_line()
+        + p9.facet_wrap('~behavior')
+        + p9.theme_bw()
+    ).save(args.bout_output, height=6, width=12, dpi=300)
 
 
 def read_annotation_dataframe(ground_truth_folder, prediction_folder, interpolation_size, trim_time) -> pd.DataFrame:
@@ -77,13 +110,14 @@ def read_annotation_dataframe(ground_truth_folder, prediction_folder, interpolat
 
     return all_annotations
 
-def generate_iou_scan(all_annotations, stitch_scan, filter_scan, filter_ground_truth: bool = False) -> pd.DataFrame:
+def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan, filter_ground_truth: bool = False) -> pd.DataFrame:
     """Scans stitch and filter values to produce a bout-level performance metrics at varying IoU values.
 
     Args:
         all_annotations: pd.DataFrame returned from `read_annotation_dataframe`
         stitch_scan: list of potential stitching values to scan
         filter_scan: list of potential filter values to scan
+        threshold_scan: list of potential iou thresholds to scan
         filter_ground_truth: allow identical stitching and filters to be applied to the ground truth data?
 
     Returns:
@@ -102,8 +136,8 @@ def generate_iou_scan(all_annotations, stitch_scan, filter_scan, filter_ground_t
             gt_vector[row['start']:row['start'] + row['duration']] = row['is_behavior']
         gt_bout_start, gt_bout_durations, gt_bout_states = rle(gt_vector)
         # ugly method to scan over each combination of stitch and filter in one line
-        for cur_stitch, cur_filter in zip(*map(np.ndarray.flatten, np.meshgrid(args.stitch_scan, args.filter_scan))):
-            if args.filter_ground_truth:
+        for cur_stitch, cur_filter in zip(*map(np.ndarray.flatten, np.meshgrid(stitch_scan, filter_scan))):
+            if filter_ground_truth:
                 cur_starts, cur_durations, cur_values = filter_data(gt_bout_start, gt_bout_durations, gt_bout_states, max_gap_size=cur_stitch, values_to_remove=[0])
                 cur_starts, cur_durations, cur_values = filter_data(cur_starts, cur_durations, cur_values, max_gap_size=cur_filter, values_to_remove=[1])
                 gt_bouts = np.stack([cur_starts[cur_values == 1], cur_durations[cur_values == 1]])
@@ -115,7 +149,7 @@ def generate_iou_scan(all_annotations, stitch_scan, filter_scan, filter_ground_t
             pr_bouts = np.stack([cur_starts[cur_values == 1], cur_durations[cur_values == 1]])
             # Add iou metrics to the list
             int_mat, u_mat, iou_mat = gutils.get_iou_mat(gt_bouts.T, pr_bouts.T)
-            for cur_threshold in np.arange(0.05, 1.01, 0.05):
+            for cur_threshold in threshold_scan:
                 new_performance = {
                     'behavior': [cur_behavior],
                     'animal': [cur_animal],
@@ -152,6 +186,7 @@ def main(argv):
     g1.add_argument('--exported_classifier', help='Exported JABS classifier to generate predictions.')
     parser.add_argument('--stitch_scan', help='List of stitching (time gaps in frames to merge bouts together) values to test.', type=float, nargs='+', default=np.arange(5, 46, 5).tolist())
     parser.add_argument('--filter_scan', help='List of filter (minimum duration in frames to consider real) values to test.', type=float, nargs='+', default=np.arange(5, 46, 5).tolist())
+    parser.add_argument('--iou_thresholds', help='List of intersection over union thresholds to scan.', type=float, nargs='+', default=np.arange(0.05, 1.01, 0.05))
     parser.add_argument('--interpolation_size', help='Number of frames to interpolate missing data.', default=0, type=int)
     parser.add_argument('--filter_ground_truth', help='Apply filters to ground truth data (default is only to filter predictions).', default=False, action='store_true')
     parser.add_argument('--scan_output', help='Output file to save the filter scan performance plot.', default=None)
@@ -181,5 +216,19 @@ if __name__ == "__main__":
 # default_filter = 5
 # default_stitch = 5
 
-# Testing
-# args = SimpleNamespace(ground_truth_folder='/media/bgeuther/Storage/TempStorage/SocialPaper/Play/Play-groundtruth/', prediction_folder='/media/bgeuther/Storage/TempStorage/SocialPaper/Play/Play-groundtruth/', stitch_scan=np.arange(4,46,5).tolist(), filter_scan=np.arange(4,46,5).tolist(), interpolation_size=0, filter_ground_truth=False, scan_output=None, bout_output=None, trim_time=None)
+# broad scan range
+# scan_ranges = np.arange(3, 15, 3).tolist() + np.arange(15, 50, 5).tolist(); thresholds = np.arange(0.05, 1.01, 0.05)
+
+# original classifiers
+# scan_ranges = np.arange(1, 46); thresholds = [0.5]
+# args = SimpleNamespace(ground_truth_folder='/media/bgeuther/Storage/TempStorage/SocialPaper/Play/Play-groundtruth/', prediction_folder='/media/bgeuther/Storage/TempStorage/SocialPaper/Play/Play-groundtruth/', stitch_scan=scan_ranges, filter_scan=scan_ranges, iou_thresholds=thresholds, interpolation_size=0, filter_ground_truth=False, scan_output='normal-iou-test.png', bout_output=None, trim_time=None)
+
+# Winnig filters
+# args = SimpleNamespace(ground_truth_folder='/media/bgeuther/Storage/TempStorage/SocialPaper/Play/Play-groundtruth/', prediction_folder='/media/bgeuther/Storage/TempStorage/SocialPaper/Play/Play-groundtruth/', stitch_scan=[1, 6], filter_scan=[6, 35], iou_thresholds=np.arange(0.01, 1.001, 0.01), interpolation_size=0, filter_ground_truth=False, scan_output=None, bout_output='pr-re-f1_normal_2023-01-02.png', trim_time=None)
+
+# fft scans
+# scan_ranges = np.arange(1, 46); thresholds = [0.5]
+# args = SimpleNamespace(ground_truth_folder='/media/bgeuther/Storage/TempStorage/SocialPaper/Play/Play-groundtruth-fft/', prediction_folder='/media/bgeuther/Storage/TempStorage/SocialPaper/Play/Play-groundtruth-fft/', stitch_scan=scan_ranges, filter_scan=scan_ranges, iou_thresholds=thresholds, interpolation_size=0, filter_ground_truth=False, scan_output='fft-iou-test.png', bout_output=None, trim_time=None)
+
+# Winnig filters
+# args = SimpleNamespace(ground_truth_folder='/media/bgeuther/Storage/TempStorage/SocialPaper/Play/Play-groundtruth-fft/', prediction_folder='/media/bgeuther/Storage/TempStorage/SocialPaper/Play/Play-groundtruth-fft/', stitch_scan=[1, 3], filter_scan=[5, 34], iou_thresholds=np.arange(0.01, 1.001, 0.01), interpolation_size=0, filter_ground_truth=False, scan_output=None, bout_output='pr-re-f1_fft_2023-01-02.png', trim_time=None)
