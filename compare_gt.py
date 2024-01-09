@@ -11,15 +11,15 @@ import jabs_utils.project_utils as putils
 import analysis_utils.gt_utils as gutils
 
 # Read in the gt annotations
-gt_annotations_folder = '/media/bgeuther/Storage/TempStorage/leinani_social_behavior_classifiers/exported_gt/'
+gt_annotations_folder = '/Users/szadys/Desktop/revised_pose'
 gt_annotations = rutils.read_project_annotations(gt_annotations_folder)
 
 # Read in the gt predictions
-predictions_folder = '/media/bgeuther/Storage/TempStorage/leinani_social_behavior_classifiers/exp_v5_poses/'
+predictions_folder = '/Users/szadys/Desktop/predictions'
 pred_behaviors = putils.get_behaviors_in_folder(predictions_folder)
 pred_poses = putils.get_poses_in_folder(predictions_folder)
 
-# Leinani tuned the filters per-behavior
+# behavior filters for huddling NEED TO CHANGE
 behavior_filters = {'Approach':5, 'Chase':9, 'Leave':3, 'Nose_genital':9, 'Nose_nose':9}
 predictions = []
 for behavior in pred_behaviors:
