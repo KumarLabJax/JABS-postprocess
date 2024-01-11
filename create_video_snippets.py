@@ -3,7 +3,7 @@ import h5py
 import argparse
 import sys
 import os
-from analysis_utils.clip_utils import write_video_clip
+from analysis_utils.clip_utils import write_video_clip, write_pose_clip
 from jabs_utils.read_utils import read_pose_file
 from typing import Union
 
@@ -42,7 +42,9 @@ def main(argv):
 	g1.add_argument('--duration', help='Duration of the clip to produce', type=float)
 	parser.set_defaults(end=-1)
 	parser.add_argument('--time_units', help='Units used when clipping (default second)', choices=['frame', 'frames', 'f', 'second', 'seconds', 's', 'minute', 'minutes', 'm', 'hour', 'hours', 'h'], default='s', type=str)
-	parser.add_argument('--pose_file', help='Optional path to input pose file. If provided, will render poses on the video.', default=None)
+	parser.add_argument('--pose_file', help='Optional path to input pose file. Required to clip pose and render pose.', default=None)
+	parser.add_argument('--out_pose', help='Write the clipped pose file as well.', default=None)
+	parser.add_argument('--render_pose', help='Render the pose on the video clip.', default=False, action='store_true')
 	parser.add_argument('--behavior_file', help='Optional path to behavior predictions. If provided, will render predictions on the video.', default=None)
 	parser.add_argument('--overwrite', '-o', help='Overwrite the output video if it already exists', default=False, action='store_true')
 	args = parser.parse_args()
@@ -79,7 +81,11 @@ def main(argv):
 		end_frame = np.clip(end_frame, 0, max_frames - 1)
 		pose_data = pose_data[start_frame:end_frame]
 	
-	write_video_clip(args.input_video, args.output_video, range(start_frame, end_frame), behavior_data, pose_data)
+	pose_for_video = pose_data if args.render_pose else None
+	write_video_clip(args.input_video, args.output_video, range(start_frame, end_frame), behavior_data, pose_for_video)
+	if args.out_pose and args.pose_file is not None:
+		write_pose_clip(args.pose_file, args.out_pose, range(start_frame, end_frame))
+
 
 
 if __name__ == '__main__':
