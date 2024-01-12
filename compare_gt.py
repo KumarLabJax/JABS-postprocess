@@ -6,6 +6,7 @@ import os
 import sys
 import numpy as np
 import argparse
+import warnings
 
 import jabs_utils.read_utils as rutils
 import jabs_utils.project_utils as putils
@@ -128,6 +129,9 @@ def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan,
     for (cur_behavior, cur_animal), animal_df in all_annotations.groupby(['behavior', 'mouse_idx']):
         # For each animal, we want a matrix of intersections, unions, and ious
         pr_df = animal_df[~animal_df['is_gt']]
+        if len(pr_df) == 0:
+            warnings.warn(f'No predictions for {cur_animal} for behavior {cur_behavior}... skipping.')
+            continue
         pr_bout_start, pr_bout_durations, pr_bout_states = pr_df['start'].values, pr_df['duration'].values, pr_df['is_behavior'].values
         # gt data only reads in 'behavior' data, so pad not behavior to the shape of predictions
         gt_df = animal_df[animal_df['is_gt']]
