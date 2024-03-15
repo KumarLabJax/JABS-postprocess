@@ -1,3 +1,4 @@
+from __future__ import annotations
 import pandas as pd
 import numpy as np
 import h5py
@@ -6,13 +7,13 @@ import os
 import re
 from datetime import datetime
 import scipy
-import globalflow as gflow
 import cv2
+from itertools import chain
 
 import jabs_utils.project_utils as putils
 from jabs_utils.bout_utils import rle, filter_data, get_bout_dists
 
-from typing import Tuple
+from typing import Tuple, List, Union
 
 # Reads in a single file and returns a dataframe of events
 # threshold should only be adjusted if you know what you're doing (most ML classifiers expect to be using a 0.5 threshold)
@@ -365,20 +366,105 @@ def read_project_annotations(folder: os.path, behavior: str=None):
 	jabs_annotations = pd.concat([parse_jabs_annotations(annotation_folder + '/' + x) for x in json_files])
 	return jabs_annotations
 
-# Definition for cost of matching for use in global flow graph identity linking
-class GraphCosts(gflow.StandardGraphCosts):
-	def __init__(self, max_track_len: int=2) -> None:
-		super().__init__(
-			penter=1e-3, pexit=1e-3, beta=0.05, max_obs_time=max_track_len - 1
-		)
-	def transition_cost(self, x: gflow.FlowNode, y: gflow.FlowNode) -> float:
-		tdiff = y.time_index - x.time_index
-		# We can just log transform the cosine distances
-		# Cosine distance should be from range 0-1
-		# We also add 0.1 in between videos to penalize not excluding centers from a video
-		# Finally, we add log(0.1) to get a good balance with enter/exits
-		logprob = np.log(scipy.spatial.distance.cdist([x.obs], [y.obs], metric='cosine') + 0.1 * tdiff) + np.log(0.1)
-		return logprob
+class VideoTracklet():
+	"""A collection of video observations for an individual."""
+	def __init__(self, track_id: Union[int, List[int]], embeds: List[np.ndarray] = []):
+		"""Initializes a video tracklet.
+
+		Args:
+			track_id: track of list of tracks in this tracklet
+			embeds: center data for the track of shape [n_videos, embed_dim]
+		"""
+		self._track_id = track_id if isinstance(track_id, list) else [track_id]
+		assert len(embeds.shape) == 2
+		self._embeddings = embeds
+
+	@property
+	def track_id(self):
+		"""List of ids contained in this tracklet."""
+		return self._track_id
+
+	@property
+	def embeddings(self):
+		"""Embedding data for this tracklet."""
+		return self._embeddings
+
+	@classmethod
+	def from_tracklets(cls, tracklets: List[VideoTracklet]):
+		"""Builds a new tracklet from 1 or more tracklets.
+
+		Args:
+			tracklets:
+				List of VideoTracklet objects to join together
+		"""
+		all_track_ids = list(chain.from_iterable([x.track_id for x in tracklets]))
+		all_embeddings = np.concatenate([x.embeddings for x in tracklets])
+		return cls(all_track_ids, all_embeddings)
+
+	@staticmethod
+	def cosine_distance(first: VideoTracklet, second: VideoTracklet, default_val: float=np.nan):
+		"""Calculates the cosine distance between two tracklets.
+
+		Args:
+			first: first tracklet to compare
+			second: second tracklet to compare
+			default_val: value supplied if distance invalid
+
+		Returns:
+			Returns the smallest cosine distance between the two tracklets.
+			Since tracklets can contain multiple centers, any pair can result in this minimum.
+			If either tracklet has invalid embedding data, default_val.
+		"""
+		embeds_1 = first.embeddings
+		embeds_2 = second.embeddings
+
+		if embeds_1.shape[0] == 0 or embeds_2.shape[0] == 0:
+			return default_val
+
+		distance = scipy.spatial.distance.cdist(embeds_1, embeds_2, metric='cosine')
+		return np.min(distance)
+
+	def compare_to(self, other: VideoTracklet):
+		"""Compares this tracklet with another."""
+		return self.cosine_distance(self, other)
+
+class Fragment():
+	"""A collection of tracklets that overlap in time."""
+	def __init__(self, tracklets: List[VideoTracklet]):
+		"""Initializes a fragment object.
+
+		Args:
+			tracklets: List of tracklets
+		"""
+		self._tracklets = tracklets
+		self._separation = self._calculate_mean_separation()
+
+	@property
+	def separation(self):
+		"""Average separation between tracklets."""
+		return self._separation
+
+	def _calculate_mean_separation(self):
+		"""Calculates the mean cosine distance between contained tracklets."""
+		separations = []
+		for i in np.arange(len(self._tracklets) - 1):
+			for j in np.arange(len(self._tracklets) - 1 - i) + i + 1:
+				distance = VideoTracklet.cosine_distance(self._tracklets[i], self._tracklets[j])
+				if np.isnan(distance):
+					separations.append(0.0)
+				else:
+					separations.append(distance)
+		return np.mean(separations)
+
+	def hungarian_match_ids(self, other: Fragment):
+		"""Matches this fragment with another through hungarian matching."""
+		distance_cost = np.zeros([len(self._tracklets), len(other._tracklets)], dtype=np.float64)
+		for i in np.arange(len(self._tracklets)):
+			for j in np.arange(len(other._tracklets)):
+				distance_cost[i, j] = VideoTracklet.cosine_distance(self._tracklets[i], other._tracklets[j])
+		row_best, col_best = scipy.optimize.linear_sum_assignment(distance_cost)
+		return row_best, col_best
+
 
 # Generates a dictionary of dictionaries to link identities between files
 # First layer of dictionaries is the file being translated
@@ -387,7 +473,7 @@ def link_identities(folder: os.path, check_model: bool=False):
 	files_in_experiment = putils.get_poses_in_folder(folder)
 	vid_names = [putils.pose_to_video(x) for x in files_in_experiment]
 	# Read in all the center data
-	center_locations = []
+	fragments = []
 	identified_model = None
 	for cur_file in files_in_experiment:
 		cur_centers, cur_model = read_pose_ids(cur_file)
@@ -396,41 +482,37 @@ def link_identities(folder: os.path, check_model: bool=False):
 			identified_model = cur_model
 		elif check_model:
 			assert identified_model == cur_model
-		# Transform the data into a better format for indexing
-		cur_centers = pd.DataFrame({'file':cur_file, 'id':np.arange(len(cur_centers)), 'centers':[x for x in cur_centers]})
-		center_locations.append(cur_centers)
-	# center_locations = pd.concat(center_locations)
-	center_data = [[observation['centers'] for cur_index, observation in cur_vid.iterrows()] for cur_vid in center_locations]
-	# Build and solve the graph
-	flowgraph = gflow.build_flow_graph(center_data, GraphCosts(len(center_data)))
-	flowdict, ll, num_traj = gflow.solve(flowgraph)
-	# Extract the tracks out of the dict
-	track_starts = [key for key, val in flowdict['S'].items() if val == 1]
-	tracklets = []
-	for tracklet_idx, start in enumerate(track_starts):
-		# Seed first values
-		cur_node = start
-		# Format is [global_id, vid_idx, id_in_vid]
-		cur_tracklet = [[tracklet_idx, cur_node.time_index, cur_node.obs_index]]
-		next_nodes = flowdict[cur_node]
-		# Continue until terminated
-		while 1 in next_nodes.values():
-			next_node_idx = np.argmax(list(next_nodes.values()))
-			cur_node = list(next_nodes.keys())[next_node_idx]
-			if cur_node == 'T':
-				break
-			next_nodes = flowdict[cur_node]
-			# Since the graph has v and u per observation, only add u
-			if cur_node.tag == 'u':
-				cur_tracklet.append([tracklet_idx, cur_node.time_index, cur_node.obs_index])
-		tracklets.append(cur_tracklet)
-	# Re-format into the dict of dicts for easier translation
-	tracklets = np.concatenate(tracklets)
-	vid_dict = {}
-	for i, vid_name in enumerate(vid_names):
-		matches_to_add = tracklets[:,1] == i
-		if np.any(matches_to_add):
-			vid_dict[vid_name] = dict(zip(tracklets[matches_to_add,0], tracklets[matches_to_add,2]))
+		tracklets = [VideoTracklet(i, cur_centers[i, :].reshape([1, -1])) for i in range(len(cur_centers))]
+		new_fragment = Fragment(tracklets)
+		fragments.append(new_fragment)
+	# Sort by best fragment and start matching from there
+	fragment_qualities = np.asarray([x.separation for x in fragments])
+	fragment_lengths = np.asarray([len(x._tracklets) for x in fragments])
+	# Adjust qualities such that fragments of the correct number are matched first...
+	# TODO:
+	# Is the median the correct operation here, or should we allow the user to choose?
+	fragment_qualities[fragment_lengths != np.ceil(np.median(fragment_lengths))] -= 1
+	sorting_order = np.argsort(-fragment_qualities)
+	# Seed first value
+	best_fragment_idx = np.where(sorting_order == 0)
+	cur_fragment = fragments[best_fragment_idx[0][0]]
+	vid_dict = {vid_names[best_fragment_idx[0][0]]: {x: x for x in range(len(cur_fragment._tracklets))}}
+	for match_count in np.arange(len(fragment_qualities) - 1) + 1:
+		next_fragment_index = np.where(sorting_order == match_count)
+		next_fragment = fragments[next_fragment_index[0][0]]
+		hungarian_match = Fragment.hungarian_match_ids(cur_fragment, next_fragment)
+		vid_dict[vid_names[next_fragment_index[0][0]]] = {new_id: old_id for old_id, new_id in zip(*hungarian_match)}
+		# Warning. We add tracklets in order based on current fragment
+		# This will preserve tracklets in cur_fragment, but discard unmatched in next_fragment.
+		new_tracklets = []
+		for i in range(len(cur_fragment._tracklets)):
+			if i in hungarian_match[0]:
+				match_idx = hungarian_match[0] == i
+				new_tracklets.append(VideoTracklet.from_tracklets([cur_fragment._tracklets[hungarian_match[0][match_idx][0]], next_fragment._tracklets[hungarian_match[1][match_idx][0]]]))
+			else:
+				new_tracklets.append(cur_fragment._tracklets[i])
+		cur_fragment = Fragment(new_tracklets)
+
 	return vid_dict
 
 # Helper function for reading a pose files identity data
