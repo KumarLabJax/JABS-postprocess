@@ -52,14 +52,15 @@ filter_experiment_time(df).groupby('Strain')['rel_time_behavior'].mean()
 
 # Updated play results:
 # Located in 
-folder = '/media/bgeuther/Storage/TempStorage/SocialPaper/Play/analysis-2023-07-20/'
+folder = '/media/bgeuther/Storage/TempStorage/SocialPaper/Play/analysis-2024-03-19/'
 results_files = [folder + x for x in [
-	'Results_2023-09-28_Approach_summaries.csv',
-	'Results_2023-09-28_Chase_summaries.csv',
-	'Results_2023-09-28_Leave_summaries.csv',
-	'Results_2023-09-28_Jerk_summaries.csv',
-	'Results_2023-09-28_Play_Chase_summaries.csv',
-	'Results_2023-09-28_Activity_1_summaries.csv']]
+	'Results_2024-03-19_Approach_summaries.csv',
+	'Results_2024-03-19_Chase_summaries.csv',
+	'Results_2024-03-19_Leave_summaries.csv',
+	'Results_2024-03-19_Jerk_summaries.csv',
+	'Results_2024-03-19_Play_Chase_summaries.csv',
+	# 'Results_2024-03-19_Activity_1_summaries.csv',
+	]]
 
 # This inline loop reads in all the data from results_files.
 # Note that header data is discarded
@@ -67,6 +68,7 @@ results_files = [folder + x for x in [
 df = pd.concat([read_ltm_summary_table(x, jmcrs_data)[1] for x in results_files])
 # 8 weeks are adults
 df['Adult'] = np.where(df['Age'].dt.days > 8*7, 'Adult', 'Juvenile')
+df['percent_no_pred'] = df['time_no_pred']/(df['time_no_pred'] + df['time_behavior'] + df['time_not_behavior'])
 
 df['group_to_color'] = df['Strain'] + ' ' + df['Adult'] + ' ' + df['sex']
 # To allow activity to be plotted against bouts...
@@ -79,7 +81,23 @@ df.loc[:,'Behavior'] = pd.Categorical(df['Behavior'], categories=['Approach', 'C
 
 adult_male_df = df[np.logical_and(df['sex'] == 'M', df['Adult'] == 'Adult')].reset_index(drop=True)
 
-(generate_time_vs_feature_plot(filter_experiment_time(adult_male_df), 'zt_time_hour', 'feature_val', 'group_to_color')+p9.facet_grid('Behavior~Room', scales='free_y')).draw().show()
+# Adult males
+(generate_time_vs_feature_plot(filter_experiment_time(adult_male_df), 'zt_time_hour', 'bout_behavior', 'group_to_color')+p9.facet_grid('Behavior~Room', scales='free_y')).draw().show()
+(generate_time_vs_feature_plot(filter_experiment_time(adult_male_df), 'zt_time_hour', 'time_behavior', 'group_to_color')+p9.facet_grid('Behavior~Room', scales='free_y')).draw().show()
+(generate_time_vs_feature_plot(filter_experiment_time(adult_male_df), 'zt_time_hour', 'percent_no_pred', 'group_to_color')+p9.facet_grid('Behavior~Room', scales='free_y')).draw().show()
+
+# All Groups
+(generate_time_vs_feature_plot(filter_experiment_time(df), 'zt_time_hour', 'bout_behavior', 'group_to_color')+p9.facet_grid('Behavior~sex+Strain', scales='free_y')).draw().show()
+(generate_time_vs_feature_plot(filter_experiment_time(df), 'zt_time_hour', 'time_behavior', 'group_to_color')+p9.facet_grid('Behavior~sex+Strain', scales='free_y')).draw().show()
+(generate_time_vs_feature_plot(filter_experiment_time(df), 'zt_time_hour', 'percent_no_pred', 'group_to_color')+p9.facet_grid('Behavior~sex+Strain', scales='free_y')).draw().show()
+
+# All Groups full 4-days
+(generate_time_vs_feature_plot(df, 'relative_exp_time', 'bout_behavior', 'group_to_color')+p9.facet_grid('Behavior~Strain+sex', scales='free_y')).draw().show()
+(generate_time_vs_feature_plot(df, 'relative_exp_time', 'time_behavior', 'group_to_color')+p9.facet_grid('Behavior~Strain+sex', scales='free_y')).draw().show()
+(generate_time_vs_feature_plot(df, 'relative_exp_time', 'percent_no_pred', 'group_to_color')+p9.facet_grid('Behavior~Strain+sex', scales='free_y')).draw().show()
+
+
+
 (generate_time_vs_feature_plot(filter_experiment_time(df), 'zt_time_hour', 'feature_val', 'group_to_color')+p9.facet_grid('Behavior~sex', scales='free_y')).draw().show()
 
 # Trimmed down version of interesting areas
