@@ -46,14 +46,15 @@ def get_iou_mat(gt_bouts: np.array, pr_bouts: np.array):
 
 # Define detection metrics, given a IoU threshold
 def calc_temporal_iou_metrics(iou_data, threshold):
+	if len(iou_data) == 0:
+		return {'tp': 0, 'fn': 0, 'fp': 0, 'pr': 0, 're': 0, 'f1': 0}
 	tp_counts = 0
 	fn_counts = 0
 	fp_counts = 0
-	for cur_iou_mat in iou_data:
-		tp_counts += np.sum(np.any(cur_iou_mat>threshold, axis=1))
-		fn_counts += np.sum(np.all(cur_iou_mat<threshold, axis=1))
-		fp_counts += np.sum(np.all(cur_iou_mat<threshold, axis=0))
-	precision = tp_counts/(tp_counts + fp_counts)
-	recall = tp_counts/(tp_counts + fn_counts)
-	f1 = 2*(precision * recall)/(precision + recall)
-	return precision, recall, f1
+	tp_counts += np.sum(np.any(iou_data > threshold, axis=1))
+	fn_counts += np.sum(np.all(iou_data < threshold, axis=1))
+	fp_counts += np.sum(np.all(iou_data < threshold, axis=0))
+	precision = tp_counts / (tp_counts + fp_counts)
+	recall = tp_counts / (tp_counts + fn_counts)
+	f1 = 2*(precision * recall) / (precision + recall)
+	return {'tp': tp_counts, 'fn': fn_counts, 'fp': fp_counts, 'pr': precision, 're': recall, 'f1': f1}
