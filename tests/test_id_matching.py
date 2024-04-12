@@ -3,20 +3,23 @@ import numpy as np
 import plotnine as p9
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize
-from jabs_utils.project_utils import get_predictions_in_folder
 from jabs_utils.read_utils import link_identities, read_pose_ids
 
+# Test folder with bleach-marked mice
 project_folder = '/media/bgeuther/Storage/TempStorage/test-behavior/'
-exp_folders = get_predictions_in_folder(project_folder)
-cur_experiment = exp_folders[0]
+# Black vs Albino coat color has a bit more interpretable data (better separation)
+project_folder = '/media/bgeuther/Storage/TempStorage/UCSD_QA/full_run/2020-12-17/'
+cur_experiment = project_folder
 linking_dict = link_identities(cur_experiment)
-
-linking_dict
 
 video_keys = sorted(linking_dict.keys())
 pose_centers = [read_pose_ids(project_folder + x + '_pose_est_v5.h5')[0] for x in video_keys]
 
 # Calculate the PCA so that we can inspect how the data moves along shorter axes
+# This isn't perfect since PCA is designed around euclidean distance.
+# However, if we normalize to unit vectors both pre- and post- pca, angles are roughly preserved (and now sorted).
+# Keeping all components should produce equivalent cosine similarity.
+# See https://stats.stackexchange.com/a/453104
 all_centers = np.concatenate(pose_centers)
 all_centers = normalize(all_centers, axis=1)
 pca = PCA(n_components=2)
@@ -37,7 +40,7 @@ melted_df = pd.melt(center_data, id_vars=['video_num', 'longterm_id', 'video', '
 (
 	p9.ggplot(melted_df, p9.aes(x='video_num', y='value', color='factor(longterm_id)'))
 	+ p9.geom_line()
-	+ p9.geom_point(p9.aes(fill='factor(animal_id)'))
+	+ p9.geom_point()
 	+ p9.facet_wrap('variable')
 	+ p9.theme_bw()
 ).draw().show()

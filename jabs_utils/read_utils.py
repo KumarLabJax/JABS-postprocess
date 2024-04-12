@@ -9,6 +9,7 @@ from datetime import datetime
 import scipy
 import cv2
 from itertools import chain
+import warnings
 
 import jabs_utils.project_utils as putils
 from jabs_utils.bout_utils import rle, filter_data, get_bout_dists
@@ -562,7 +563,10 @@ def link_identities(folder: os.path, check_model: bool = False):
 	fragments = []
 	identified_model = None
 	for cur_file in files_in_experiment:
-		cur_centers, cur_model = read_pose_ids(cur_file)
+		try:
+			cur_centers, cur_model = read_pose_ids(cur_file)
+		except NotImplementedError:
+			warnings.warn(f'Skipping file for identities: {cur_file}')
 		# Check that new data conforms to the name of the previous model
 		if identified_model is None:
 			identified_model = cur_model
@@ -619,7 +623,7 @@ def read_pose_ids(pose_file: os.path):
 	# No longterm IDs exist, provide a default value of the correct shape
 	elif pose_v == 3:
 		with h5py.File(pose_file, 'r') as f:
-			num_mice = np.max()
+			num_mice = np.max(f['poseest/instance_count'])
 			centers = np.zeros([num_mice, 0], dtype=np.float64)
 			model_used = 'None'
 		# Linking identities across multiple files does not yet support this, so throw an error here
