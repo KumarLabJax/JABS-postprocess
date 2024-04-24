@@ -1,4 +1,4 @@
-"""Associated lines of code that deal with the comparison of predictions (from classify.py) and GT annotation (from a JABS project)."""
+"Associated lines of code that deal with the comparison of predictions (from classify.py) and GT annotation (from a JABS project)."""
 
 import pandas as pd
 import plotnine as p9
@@ -45,13 +45,13 @@ def evaluate_ground_truth(args):
 
     (
         p9.ggplot(performance_df[performance_df['threshold'] == middle_threshold])
-        + p9.geom_tile(p9.aes(x='stitch', y='filter', fill='f1'))
-        + p9.geom_text(p9.aes(x='stitch', y='filter', label='np.round(f1, 2)'), color='black', size=2)
+        + p9.geom_tile(p9.aes(x='stitch', y='filter', fill='f1', height=25, width=25))
+        + p9.geom_text(p9.aes(x='stitch', y='filter', label='np.round(f1, 2)'), color='black', size=5)
         # Obtain the highest F1 score to highlight it
         + p9.geom_point(performance_df[performance_df['threshold'] == middle_threshold].groupby(['behavior']).apply(lambda x: x.iloc[np.nanargmax(x['f1'].values)]), p9.aes(x='stitch', y='filter'), shape='*', size=3, fill='#ffffff00')
         + p9.facet_wrap('~behavior')
         + p9.theme_bw()
-        + p9.labs(title=f'Performance at {middle_threshold} IoU')
+        + p9.labs(title=f'Performance at {np.round(middle_threshold,2)} IoU')
     ).save(args.scan_output, height=6, width=12, dpi=300)
 
     winning_filters = performance_df[performance_df['threshold'] == middle_threshold].groupby(['behavior']).apply(lambda x: x.iloc[np.nanargmax(x['f1'].values)] if np.any(~np.isnan(x['f1'].values)) else x.iloc[0]).reset_index(drop=True)[['behavior', 'stitch', 'filter']]
@@ -63,6 +63,7 @@ def evaluate_ground_truth(args):
         + p9.geom_line()
         + p9.facet_wrap('~behavior')
         + p9.theme_bw()
+	+ p9.labs(title=f'Accuracy Metrics over IoU Thresholds {melted_winning}')
     ).save(args.bout_output, height=6, width=12, dpi=300)
 
 
@@ -188,9 +189,9 @@ def main(argv):
     g1 = parser.add_mutually_exclusive_group()
     g1.add_argument('--prediction_folder', help='Path to the folder where behavior predictions were made.')
     g1.add_argument('--exported_classifier', help='Exported JABS classifier to generate predictions.')
-    parser.add_argument('--stitch_scan', help='List of stitching (time gaps in frames to merge bouts together) values to test.', type=float, nargs='+', default=np.arange(5, 46, 5).tolist())
-    parser.add_argument('--filter_scan', help='List of filter (minimum duration in frames to consider real) values to test.', type=float, nargs='+', default=np.arange(5, 46, 5).tolist())
-    parser.add_argument('--iou_thresholds', help='List of intersection over union thresholds to scan.', type=float, nargs='+', default=np.arange(0.05, 1.01, 0.05))
+    parser.add_argument('--stitch_scan', help='List of stitching (time gaps in frames to merge bouts together) values to test.', type=float, nargs='+', default=np.arange(50, 500, 25).tolist())
+    parser.add_argument('--filter_scan', help='List of filter (minimum duration in frames to consider real) values to test.', type=float, nargs='+', default=np.arange(50, 1000, 25).tolist())
+    parser.add_argument('--iou_thresholds', help='List of intersection over union thresholds to scan.', type=float, nargs='+', default=np.arange(0.6, 1.01, 0.05))
     parser.add_argument('--interpolation_size', help='Number of frames to interpolate missing data.', default=0, type=int)
     parser.add_argument('--filter_ground_truth', help='Apply filters to ground truth data (default is only to filter predictions).', default=False, action='store_true')
     parser.add_argument('--scan_output', help='Output file to save the filter scan performance plot.', default=None)
