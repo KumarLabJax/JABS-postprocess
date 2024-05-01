@@ -10,6 +10,11 @@ import jabs_utils.read_utils as rutils
 import jabs_utils.project_utils as putils
 import analysis_utils.gt_utils as gutils
 
+'''
+This is the original code modified from Brian's version of compare_gt.py to make a huddling specific graph for the 
+original JABS classifier -- not meant for the heuristic huddling classifier
+'''
+
 gt_annotations_folder = '/Users/szadys/Desktop/MiceVideos'
 gt_annotations = rutils.read_project_annotations(gt_annotations_folder)
 

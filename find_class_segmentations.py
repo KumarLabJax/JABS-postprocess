@@ -1,13 +1,18 @@
 import numpy as np
 import pandas as pd
-#from itertools import chain
 import cv2
-#import scipy
 import h5py
 import plotnine as p9
 import sys
 import os
 import math
+
+'''
+This file contains all the methods to run the heuristic huddling classifier but does not contain evaluation
+See compare_classifiers for evaluation methods
+'''
+
+# Methods from Brian
 
 # Removes 0-padding from a contour
 def get_trimmed_contour(padded_contour, default_val=-1):
@@ -98,12 +103,11 @@ def h5py_file_to_array(path):
 	return jabs_seg_data, longterm_seg_id_data
 
 def make_segmentation_frames(path,output_folder):
-	""" Makes black and white images for each frame of the given video and 
+	""" Makes black and white images for each frame of the given video 
+		and stores them in a folder for future use
 	Args:
 		path: the h5 file  
 		output_folder: where the images will be saved 
-	Returns:
-		jabs_seg_data
 	"""
 	if not os.path.exists('/Users/szadys/jabs-postprocess/'+output_folder):
 		os.makedirs('/Users/szadys/jabs-postprocess/'+output_folder)
@@ -114,13 +118,13 @@ def make_segmentation_frames(path,output_folder):
 			all_renders.append(render_blob(jabs_seg_data[frame, mouse_id]))
 		zip_list = [sum(zip_list) for zip_list in zip(all_renders)]
 		cv2.imwrite(output_folder + 'frame' + str(frame) +'.png', (sum(zip_list)*255).astype(np.uint8))
-	return jabs_seg_data
 
 def erode_segmentation(segmentation_folder,video_name):
-	"""
+	""" Erodes the images created by make_segmentation_frames to account for noise
+		which is mostly intersecting tails
 	Args:
-		segmentation
-	Returns:
+		segmentation_folder: output from make_segmentation_frames
+		video_name: used to organize and store eroded frames
 	"""
 	os.makedirs(video_name+'/'+video_name+'_frames/eroded_and_dilated_1x_filter_775')
 	for frame_num in range(len(os.listdir(segmentation_folder))):
@@ -132,9 +136,15 @@ def erode_segmentation(segmentation_folder,video_name):
 		cv2.imwrite(video_name+'/'+video_name+'_frames/eroded_and_dilated_1x_filter_775/frame'+str(frame_num)+'eroded_and_dilated_1x_filter_775.png',dilated)
 
 def find_largest_contour(path, num_frames):
-	"""
-	Args:
+	""" Determines the largest contour in each frame by area (in pixels) using eroded images from erode_segmentation
+	Args: 
+		path: path to eroded images for the video of interest
+		num_frames: length of the video
 	Returns:
+		largest_blob: area of the largest blob
+		largest_blob_idx: index of the largest blob in the frame
+		num_contours: number of contours in each frame
+		heur_contour_pts: list of each contour per frame with points outlining each contour 
 	"""
 	largest_blob = np.zeros(num_frames)
 	num_contours = np.zeros(num_frames)
@@ -151,11 +161,12 @@ def find_largest_contour(path, num_frames):
 		for i in range(len(contours)):
 			cnt = contours[i]
 			areas[i] = cv2.contourArea(cnt)
-			if hierarchy[0][i][3] == -1 and areas[i]>500:
+			if hierarchy[0][i][3] == -1 and areas[i]>500: #there is a contour at this index and it isn't noise
 				contour_list.append(cnt)
 				filt_areas.append(areas[i])
-		if len(areas) > 0:
+		if len(areas) > 0: # there are identified contours in the frame
 			largest_blob[frame_num] = max(areas)
+			largest_blob_idx[frame_num] = np.where(max(areas))[0]
 		else:
 			largest_blob[frame_num] = 0
 		num_contours[frame_num] = len(contour_list)
@@ -163,23 +174,23 @@ def find_largest_contour(path, num_frames):
 	return largest_blob, largest_blob_idx, num_contours, heur_contour_pts
 
 def plot_largest_contour(largest_blob, video_name):
-	"""
+	""" Graphs the area of the largest contour per frame for a given video
 	Args:
-	Returns:
+		largest_blob: list of the areas of the largest blobs in each frame
+		video_name: path to the video of interest
 	"""
 	largest_blob = pd.DataFrame(largest_blob)
 	(p9.ggplot(data = largest_blob, mapping = p9.aes(y = largest_blob[0], x = range(len(largest_blob))))+
 	p9.geom_line()+
-	#p9.geom_hline(yintercept=np.percentile(largest_blob,75))+
 	p9.geom_hline(yintercept = np.median(largest_blob), color = 'red')
 	+ p9.theme(prev = p9.element_prev(size=28, font= 'Times New Roman'))
 	+p9.labs(x='Frame',y='Largest Contour Size (in pixels)', title='Largest Contour in Training Data', size = 50)).save(video_name+'/largest_blob_by_frame_'+video_name+'_eroded_and_dilated_1x_filter_775.png',height=6, width=12, dpi=300)
 
 def plot_num_contours(num_contours,video_name):
-	"""
+	""" Graphs the number of contours per frame for a given video
 	Args:
-		num_contours:
-		video_name:
+		num_contours: list of the number of contours in each frame
+		video_name: path to the video of interest
 	Returns:
 	"""
 	num_contours = pd.DataFrame(num_contours)
@@ -190,13 +201,13 @@ def plot_num_contours(num_contours,video_name):
 
 
 def blob_to_huddling(largest_blob, num_contours, file_name):
-	"""
+	""" Used in the heuristic classifier without identity, used to identify frames where huddling is occurring
 	Args:
-		largest_blob:
-		num_contours:
-		file_name:
+		largest_blob: a list of the area of the largest contour in each frame
+		num_contours: a list of the number of contours in each frame 
+		file_name: the name of the video of interest
 	Returns:
-		bouts:
+		bouts: a dataframe of the huddling data per video without identity
 	"""
 	data = []
 	huddle_length = 0
@@ -225,17 +236,18 @@ def blob_to_huddling(largest_blob, num_contours, file_name):
 	return bouts
 
 def stitch_bouts(bout_file,file_name, num_mouse, num_frames):
-	"""
+	""" Creates the final version of the heuristic huddling classifier bouts
 	Args:
-		bout_file:
-		file_name:
-	Returns:
+		bout_file: uses the output from from stitch identities
+		file_name: video of interest
+		num_mouse: number of mice in the video
+		num_frames: number of frames in the video
 	"""
 	bouts = pd.read_csv(bout_file)
 	stitched_bouts = []
-	behavior_bouts = bouts.loc[bouts['huddling']==True]
-	prev_bout = {'start': behavior_bouts.iloc[0]['start'], 'end': behavior_bouts.iloc[0]['end'], 'huddling': behavior_bouts.iloc[0]['huddling'], 'mouse': behavior_bouts.iloc[0]['mouse'], 'vid_name': file_name}
-	#print(behavior_bouts)
+	behavior_bouts = bouts.loc[bouts['huddling']==True] # only looks at bouts where huddling is occurring 
+	prev_bout = {'start': behavior_bouts.iloc[0]['start'], 'end': behavior_bouts.iloc[0]['end'], 'huddling': behavior_bouts.iloc[0]['huddling'], 'mouse': behavior_bouts.iloc[0]['mouse'], 'vid_name': file_name} 
+	# goes through the bouts where huddling is occurring 
 	for i in range(1, len(behavior_bouts)):
 		bout = behavior_bouts.iloc[i]
 		if bout['start'] - prev_bout['end'] < 45 and bout['mouse'] == prev_bout['mouse']:
@@ -248,7 +260,6 @@ def stitch_bouts(bout_file,file_name, num_mouse, num_frames):
 	if prev_bout['mouse'] < num_mouse:
 		stitched_bouts.append(prev_bout)
 	stitched_bouts = pd.DataFrame(stitched_bouts)
-	#print(stitched_bouts)
 	binary_bouts = np.zeros((num_mouse, num_frames))
 	for i in range(stitched_bouts['mouse'].max()+1):
 		mouse = stitched_bouts.loc[stitched_bouts['mouse']==i]
@@ -259,7 +270,6 @@ def stitch_bouts(bout_file,file_name, num_mouse, num_frames):
 	for i in range(stitched_bouts['mouse'].max()+1):
 		huddle_length = 0
 		not_huddle_length= 0
-		print(len(binary_bouts[0]))
 		for j in range(len(binary_bouts[0])):
 			if sum(binary_bouts[:,j]) > 1 and binary_bouts[i,j] == 1: #if the frame is huddling
 				if not_huddle_length>0 and huddle_length == 0: #if the false is long enough
@@ -290,9 +300,7 @@ def stitch_bouts(bout_file,file_name, num_mouse, num_frames):
 			huddle_indicator=False
 			filtered_bouts.append({'start': j-not_huddle_length+1, 'end': j, "huddling": huddle_indicator, 'mouse': i, 'vid_name': file_name})				
 	filtered_bouts = pd.DataFrame(filtered_bouts)
-	print(filtered_bouts)
 	bout_length = 0
-	print(np.where(np.sum(binary_stitched_bouts, axis=0)==1))
 	wrong_start=0
 	for i in range(len(binary_stitched_bouts)):
 		for j in range(len(binary_stitched_bouts[i])):
@@ -300,23 +308,13 @@ def stitch_bouts(bout_file,file_name, num_mouse, num_frames):
 				bout_length += 1
 				if bout_length == 1:
 						wrong_start = j
-						print(wrong_start)
 			else:
 				if bout_length > 10 and wrong_start!=0:
 					curr_mouse = filtered_bouts.loc[filtered_bouts['mouse']==i]
-					print(curr_mouse)
-					print(wrong_start)
-					print(bout_length)
-					print(i)
-					print(filtered_bouts.loc[filtered_bouts['mouse']==i].loc[filtered_bouts['end'] == wrong_start+bout_length, 'end'])
-					print(filtered_bouts.loc[filtered_bouts['mouse']==i].loc[filtered_bouts['start'] == wrong_start+bout_length, 'start'])
 					if sum(binary_stitched_bouts[:,wrong_start]) == 1 and binary_stitched_bouts[i,wrong_start]==1:
 						if not filtered_bouts.loc[filtered_bouts['mouse']==i].loc[filtered_bouts['end'] == wrong_start+bout_length, 'end'].empty and not filtered_bouts.loc[filtered_bouts['mouse']==i].loc[filtered_bouts['start'] == wrong_start+bout_length, 'start'].empty: #post huddling
-							print(bout_length)
 							idx = curr_mouse.index[curr_mouse['end']==wrong_start+bout_length][0]
-							print(idx)
 							next_idx = idx + 1
-							print(next_idx)
 							curr = filtered_bouts.iloc[idx]
 							curr['end'] = wrong_start
 							next = filtered_bouts.iloc[next_idx]
@@ -324,39 +322,24 @@ def stitch_bouts(bout_file,file_name, num_mouse, num_frames):
 							filtered_bouts.iloc[idx] = curr
 							filtered_bouts.iloc[next_idx] = next	
 						elif filtered_bouts.loc[filtered_bouts['mouse']==i].loc[filtered_bouts['end'] == wrong_start+bout_length, 'end'].empty: #pre huddling
-								print('pre')
-								print(filtered_bouts.loc[filtered_bouts['mouse']==i].loc[filtered_bouts['start'] == wrong_start+bout_length, 'start'])
-								print(filtered_bouts.index[filtered_bouts['start']==wrong_start])
 								idx = curr_mouse.index[curr_mouse['start']==wrong_start].values
-								print(idx)
 								if len(idx) == 0:
 									idx = curr_mouse.index[curr_mouse['start']==wrong_start+1].values
-								print(idx)
 								prev_idx = idx - 1
-								print(prev_idx)
 								curr = filtered_bouts.iloc[idx]
-								print(curr)
 								prev = filtered_bouts.iloc[prev_idx]
 								prev['end'] = wrong_start+bout_length
 								prev['huddling'] = False
 								curr['start'] = wrong_start+bout_length+1
-								print(curr)
-								print(prev)
 								filtered_bouts.iloc[idx] = curr
 								filtered_bouts.iloc[prev_idx] = prev
 						elif filtered_bouts.loc[filtered_bouts['mouse']==i].loc[filtered_bouts['start'] == wrong_start+bout_length, 'start'].empty:
-							print('post')
-							print(filtered_bouts.loc[filtered_bouts['mouse']==i].loc[filtered_bouts['end'] == wrong_start+bout_length, 'end'])
-							print(filtered_bouts.index[filtered_bouts['end']==wrong_start])
 							idx = filtered_bouts.index[filtered_bouts['end']==wrong_start]
 							next_idx = curr_mouse.index[curr_mouse['start']==wrong_start][0]+1
-							print(next_idx)
 							curr = filtered_bouts.iloc[idx]
 							curr['end'] = wrong_start
 							next = filtered_bouts.iloc[next_idx]
 							next['start'] = wrong_start+bout_length+1
-							print(curr)
-							print(prev)
 							filtered_bouts.iloc[idx] = curr
 							filtered_bouts.iloc[next_idx] = next		
 				bout_length=0
@@ -461,7 +444,6 @@ def applying_identities(path, video_name, num_contours, heur_contour_pts, larges
 		if num_contours[frame] < jabs_mice_num: #changing the huddling contours to contain more than one mouse
 			temp[int(largest_blob_idx[frame])].update({'jabs_mouse_num':np.where(id_list == 0)[0]})
 		identities.append(temp)
-	print(identities[0])
 
 
 def simple_identities(path, video_name, num_contours, heur_contour_pts, largest_blob_idx):
@@ -504,7 +486,7 @@ def simple_identities(path, video_name, num_contours, heur_contour_pts, largest_
 				seg_id = longterm_seg_id_data[frame][mouse_num]-1
 			elif jabs_mice_num > 4: #too many contours, typically noise
 				seg_id = 0
-			else: # the identity set was correct so it stays the same
+			else: # jabs_mouse_num == 4 or the id = 0
 				seg_id = mouse_num
 			if cntr != int(largest_blob_idx[frame]): #if the current contour is not part of the largest blob 
 				id_list[seg_id] = 0
@@ -575,11 +557,11 @@ def main(argv):
 	output_folder = video_name + '/' + video_name + '_frames/original/'
 	num_frames = 17991
 	num_mouse = 4
-	#jabs_seg_data = make_segmentation_frames(path, output_folder)
-	#erode_segmentation(output_folder, video_name)
-	# largest_blob, largest_blob_idx, num_contours, heur_contour_pts = find_largest_contour(video_name+'/'+video_name+'_frames/eroded_and_dilated_1x_filter_775/', num_frames)
-	# huddling_identities = simple_identities(path, video_name, num_contours, heur_contour_pts, largest_blob_idx) 
-	# behavior_with_identity(video_name,video_name+'/'+video_name+'_seg_ids_simple.csv', 'huddling', num_mouse)
+	make_segmentation_frames(path, output_folder)
+	erode_segmentation(output_folder, video_name)
+	largest_blob, largest_blob_idx, num_contours, heur_contour_pts = find_largest_contour(video_name+'/'+video_name+'_frames/eroded_and_dilated_1x_filter_775/', num_frames)
+	simple_identities(path, video_name, num_contours, heur_contour_pts, largest_blob_idx) 
+	behavior_with_identity(video_name,video_name+'/'+video_name+'_seg_ids_simple.csv', 'huddling', num_mouse)
 	stitched_bouts = stitch_bouts(video_name+'/'+video_name+'.csv', video_name+'_with_identities', num_mouse, num_frames)
 	huddling_ethogram(stitched_bouts, video_name, num_frames)
 
