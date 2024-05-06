@@ -436,8 +436,12 @@ def read_project_annotations(folder: os.path, behavior: str = None):
 	"""
 	if re.search(r'(rotta|jabs)/annotations', folder):
 		annotation_folder = folder
-	else:
+	elif os.path.exists(folder + '/rotta/annotations'):
 		annotation_folder = folder + '/rotta/annotations/'
+	elif os.path.exists(folder + '/jabs/annotations/'):
+		annotation_folder = folder + '/jabs/annotations/'
+	else:
+		raise FileNotFoundError(f'Annotations folder not found for folder {folder}')
 	json_files = [x for x in os.listdir(annotation_folder) if os.path.splitext(x)[1] == '.json']
 	jabs_annotations = pd.concat([parse_jabs_annotations(annotation_folder + '/' + x) for x in json_files])
 	return jabs_annotations
