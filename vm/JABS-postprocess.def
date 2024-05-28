@@ -16,7 +16,6 @@ From: python:3.10-slim-bullseye
 	apt-get install -y libsm6
 	# GUI
 	apt-get install -y qtbase5-dev libglu1-mesa-dev libgl1-mesa-glx libxcb-util1 libvtk6-dev
-	# Graph flow for linking identities uses a git repo
 	apt-get install -y git
 
 	# Install all the python packages
