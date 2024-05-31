@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import sys
 import argparse
+from types import SimpleNamespace
 
 from jabs_utils.project_utils import get_behaviors_in_folder, get_predictions_in_folder
 from jabs_utils.read_utils import read_experiment_folder, read_activity_folder
@@ -51,31 +52,33 @@ def generate_behavior_tables(args, behavior_args: str, linking_dicts: dict={}, e
 	# Merge experiments into a single project (RLE format)
 	experiment_bout_data = pd.concat(experiment_bout_data)
 	# Write project bout output
-	write_experiment_data(args, behavior_args.behavior, experiment_bout_data, suffix='_' + behavior_args.behavior + '_bouts')
+	write_experiment_data(args, behavior_args, experiment_bout_data, suffix='_' + behavior_args.behavior + '_bouts')
 	# Convert project into binned data
 	experiment_bin_data = generate_binned_results(experiment_bout_data, args.out_bin_size)
 	# Remove empty data
 	experiment_bin_data = experiment_bin_data[~np.all(experiment_bin_data[['time_no_pred', 'time_not_behavior', 'time_behavior']] == 0, axis=1)]
 	# Write binned project output
-	write_experiment_data(args, behavior_args.behavior, experiment_bin_data, suffix='_' + behavior_args.behavior + '_summaries')
+	write_experiment_data(args, behavior_args, experiment_bin_data, suffix='_' + behavior_args.behavior + '_summaries')
 	return experiment_bout_data, linking_dicts
 
 
 # Generates 3 tables for a given experiment
-def generate_activity_tables(args, cm_per_frame_threshold: float, linking_dicts: dict={}, experiment_dist_dicts: dict={}, activity_idx: int=0):
+def generate_activity_tables(args, cm_per_frame_threshold: float, linking_dicts: dict = {}, experiment_dist_dicts: dict = {}, activity_idx: int = 0):
+	behavior_str = 'Activity > ' + str(np.round(cm_per_frame_threshold * 30, 3)) + 'cm/s'
+	behavior_args = SimpleNamespace(behavior=behavior_str, interpolate_size=5, stitch_gap=5, min_bout_length=5)
 	# Detect all the experiments in a folder
 	exp_folders = get_predictions_in_folder(args.project_folder)
 	# Read in the activity data for the experiments
 	experiment_activity_data = []
 	for cur_experiment in exp_folders:
 		if cur_experiment in linking_dicts.keys() and cur_experiment in experiment_dist_dicts.keys():
-			experiment_data, _, experiment_dists = read_activity_folder(cur_experiment, activity_threshold = cm_per_frame_threshold, interpolate_size = args.interpolate_size, stitch_bouts = args.stitch_gap, filter_bouts = args.min_bout_length, smooth = args.activity_smooth, linking_dict = linking_dicts[cur_experiment], activity_dict = experiment_dist_dicts[cur_experiment])
+			experiment_data, _, experiment_dists = read_activity_folder(cur_experiment, activity_threshold=cm_per_frame_threshold, interpolate_size=behavior_args.interpolate_size, stitch_bouts=behavior_args.stitch_gap, filter_bouts=behavior_args.min_bout_length, smooth=args.activity_smooth, linking_dict=linking_dicts[cur_experiment], activity_dict=experiment_dist_dicts[cur_experiment])
 		# Although probably impossible, still check if we only have distances
 		elif cur_experiment in experiment_dist_dicts.keys():
-			experiment_data, linking_dict, experiment_dists = read_activity_folder(cur_experiment, activity_threshold = cm_per_frame_threshold, interpolate_size = args.interpolate_size, stitch_bouts = args.stitch_gap, filter_bouts = args.min_bout_length, smooth = args.activity_smooth, activity_dict = experiment_dist_dicts[cur_experiment])
+			experiment_data, linking_dict, experiment_dists = read_activity_folder(cur_experiment, activity_threshold=cm_per_frame_threshold, interpolate_size=behavior_args.interpolate_size, stitch_bouts=behavior_args.stitch_gap, filter_bouts=behavior_args.min_bout_length, smooth=args.activity_smooth, activity_dict=experiment_dist_dicts[cur_experiment])
 			linking_dicts[cur_experiment] = linking_dict
 		else:
-			experiment_data, linking_dict, experiment_dists = read_activity_folder(cur_experiment, activity_threshold = cm_per_frame_threshold, interpolate_size = args.interpolate_size, stitch_bouts = args.stitch_gap, filter_bouts = args.min_bout_length, smooth = args.activity_smooth)
+			experiment_data, linking_dict, experiment_dists = read_activity_folder(cur_experiment, activity_threshold=cm_per_frame_threshold, interpolate_size=behavior_args.interpolate_size, stitch_bouts=behavior_args.stitch_gap, filter_bouts=behavior_args.min_bout_length, smooth=args.activity_smooth)
 			experiment_dist_dicts[cur_experiment] = experiment_dists
 			linking_dicts[cur_experiment] = linking_dict
 		experiment_activity_data.append(experiment_data)
@@ -84,12 +87,11 @@ def generate_activity_tables(args, cm_per_frame_threshold: float, linking_dicts:
 	experiment_activity_data = pd.concat(experiment_activity_data)
 	# Write project bout output
 	if not args.exclude_activity:
-		behavior_str = 'Activity > ' + str(np.round(cm_per_frame_threshold*30,3)) + 'cm/s'
-		write_experiment_data(args, behavior_str, experiment_activity_data, suffix='_Activity_' + str(activity_idx) + '_bouts')
+		write_experiment_data(args, behavior_args, experiment_activity_data, suffix='_Activity_' + str(activity_idx) + '_bouts')
 		# Convert project into binned data
 		experiment_bin_data = generate_binned_results(experiment_activity_data, args.out_bin_size)
 		# Write binned project output
-		write_experiment_data(args, behavior_str, experiment_bin_data, suffix='_Activity_' + str(activity_idx) + '_summaries')
+		write_experiment_data(args, behavior_args, experiment_bin_data, suffix='_Activity_' + str(activity_idx) + '_summaries')
 	return experiment_activity_data, linking_dicts, experiment_dist_dicts
 
 
