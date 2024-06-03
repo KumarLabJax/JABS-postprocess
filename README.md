@@ -25,10 +25,10 @@ Only python3.10 has been tested.
 ## Multi-Animal Multi-Day Table Generation
 
 ```
-python3 generate_behavior_tables.py --project_folder /path/to/project/folder --out_prefix results
+python3 generate_behavior_tables.py --project_folder /path/to/project/folder --out_prefix results --behavior Behavior_1 --behavior Behavior_2
 ```
 
-This will generate 2 behavior table files per behavior detected in the project folder. Optionally, you can include `--behavior BehaviorName` to only generate a behavior table for that one behavior.
+This will generate 2 behavior table files per behavior detected in the project folder. You must include `--behavior BehaviorName` to generate a behavior table for each behavior. If you are unsure which behavior are available in a given project folder, you can check by intentionally guessing incorrectly.
 
 To see all options with a short description, run:
 
