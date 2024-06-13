@@ -6,11 +6,18 @@ import numpy as np
 import re
 import os
 from pathlib import Path
+from datetime import datetime
 from typing import List
 
 BEHAVIOR_CLASSIFY_VERSION = 1
 POSE_REGEX_STR = '_pose_est_v[2-6].h5'
 PREDICTION_REGEX_STR = '_behavior.h5'
+DATE_REGEX_STR = '[0-9]{4}-[0-9]{2}-[0-9]{2}'
+DATE_FMT = '%Y-%m-%d'
+TIME_REGEX_STR = '[0-9]{2}-[0-9]{2}-[0-9]{2}'
+TIME_FMT = '%H-%M-%S'
+TIMESTAMP_REGEX_STR = f'{DATE_REGEX_STR}_{TIME_REGEX_STR}'
+TIMESTAMP_FMT = f'{DATE_FMT}_{TIME_FMT}'
 
 
 class MissingBehaviorException(ValueError):
@@ -67,6 +74,64 @@ class ClassifierSettings:
 
 	def __str__(self):
 		return f'Settings: behavior={self._behavior}, interpolate={self._interpolate}, stitch={self._stitch}, filter={self._min_bout}'
+
+	def __repr__(self):
+		return self.__str__()
+
+
+class VideoMetadata:
+	"""Metadata associated with an experimental video."""
+	def __init__(self, file: Path):
+		"""Initializes a VideoMetadata object.
+
+		Args:
+			file: a file pointing to a video, pose file, or behavior prediction file
+
+		Notes:
+			The filename can encode information pertaining to a specific video.
+		"""
+		self._original_file = Path(file)
+		self._folder = self._original_file.parent
+		file_str = self._original_file.name
+		self._video = re.sub(f'({POSE_REGEX_STR}|{PREDICTION_REGEX_STR}|\\.avi|\\.mp4)', '', file_str)
+		time_search = re.search(TIMESTAMP_REGEX_STR, file_str)
+		video_start_time = time_search.group() if time_search is not None else '1970-01-01_00-00-00'
+		self._time = datetime.strptime(video_start_time, TIMESTAMP_FMT)
+		time_search = re.search(DATE_REGEX_STR, self._folder)
+		self._date_start = time_search.group() if time_search is not None else video_start_time[:10]
+
+	@property
+	def folder(self):
+		"""Folder of the original path supplied."""
+		return self._folder
+
+	@property
+	def time(self):
+		"""Time object parsed from the file pattern."""
+		return self._time
+
+	@property
+	def time_str(self):
+		"""Formatted version of the time string."""
+		return self._time.strftime('%Y-%m-%s %H:%M:%S')
+
+	@property
+	def date_start(self):
+		"""Date string parsed from folder pattern."""
+		return self._date_start
+
+	@property
+	def video(self):
+		"""Video basename, which is close to the original Path parsed, just with different suffixes removed."""
+		return self._video
+
+	@property
+	def experiment(self):
+		"""Experiment prefix."""
+		return self._experiment
+
+	def __str__(self):
+		return f'Video: {self._video}, Experiment: {self._experiment}, Time: {self.time_str}, Date: {self._date_start}'
 
 	def __repr__(self):
 		return self.__str__()
@@ -393,49 +458,87 @@ class BinTable(Table):
 
 class Prediction(BoutTable):
 	"""A prediction object that defines how to interact with prediction files."""
-	def __init__(self, source_file: Path, settings: ClassifierSettings):
+	def __init__(self, settings: ClassifierSettings, data: pd.DataFrame, video_metadata: VideoMetadata):
 		"""Initializes a prediction object.
 
 		Args:
-			source_file: the file associated with the predictions
 			settings: settings used for these predictions
+			data: tabular data to store
+			video_metadata: metadata parsed from originating file
 		"""
+		# While we can pass the data in here, it's safer not to since it will check against default required fields.
 		super().__init__(settings, None)
-		self._source_file = source_file
-		with h5py.File(source_file, 'r') as f:
-			prediction_grp = f['predictions']
-			self._behaviors = list(prediction_grp.keys())
-			self._num_frames = prediction_grp[str(self._behaviors[0]) + '/predicted_class'].shape[1]
-			self._num_animals = prediction_grp[str(self._behaviors[0]) + '/predicted_class'].shape[0]
 
-		# Modifies self._data to contain the correct table
-		self._generate_bout_table()
-		self._data['video_name'] = Path(source_file).stem
+		self._data = pd.copy(data)
+		self._data['video_name'] = video_metadata.video
+		self._data['exp_prefix'] = video_metadata.experiment
+		self._data['time'] = video_metadata.time_str
 
-	def _generate_bout_table(self):
+		self._file_meta = video_metadata
+
+	@classmethod
+	def from_prediction_file(cls, source_file: Path, settings: ClassifierSettings):
+		"""Initialized a bout table from a prediction file.
+
+		Args:
+			source_file: the file containing predictions
+			settings: settings used for these predictions
+
+		Returns:
+			Prediction object containing the parsed predictions
+		"""
+		bout_df = cls.generate_bout_table(source_file, settings)
+		video_metadata = VideoMetadata(source_file)
+
+		return cls(settings, bout_df, video_metadata)
+
+	@classmethod
+	def from_no_prediction(cls, settings: ClassifierSettings, num_frames: int, num_animals: int, file: Path):
+		"""Initializes a bout table with no predictions made.
+
+		Args:
+			settings: classifier settings to carry over to the predictions
+			num_frames: number of frames in the video where no predictions were made
+			num_animals: number of animals to make no predictions on
+			file: filename to try and parse video metadata (video, pose, or prediction). Does not need to exist.
+
+		Returns:
+			Prediction object with only 1 bout of "no prediction" for each animal
+		"""
+		bout_df = cls.generate_default_bouts(num_frames, num_animals)
+		video_metadata = VideoMetadata(file)
+
+		return cls(settings, bout_df, video_metadata)
+
+	@staticmethod
+	def generate_bout_table(source_file: Path, settings: ClassifierSettings):
 		"""Generates a bout table given classifier settings.
 
 		Args:
+			source_file: the file containing predictions
 			settings: settings used when generating the bouts
 
 		Returns:
 			BoutTable containing the predictions.
+
+		Raises:
+			MissingBehaviorException if behavior file exists but contains no behavior predictions.
 		"""
-		if self._settings.behavior not in self._behaviors:
-			self._generate_default_bouts()
-			return
-
-		with h5py.File(self._source_file, 'r') as f:
-			class_calls = f[f'predictions/{self._settings.behavior}/predicted_class'][:]
-
-		if self._num_animals != class_calls.shape[0] or self._num_frames != class_calls.shape[1]:
-			raise ValueError(f'Read predictions don\'t match shape. File: {class_calls.shape}, Object: {[self._num_animals, self._num_frames]}')
+		with h5py.File(source_file, 'r') as f:
+			if settings.behavior not in f[f'predictions/{settings.behavior}'].keys():
+				available_keys = f['predictions'].keys()
+				if len(available_keys) > 0:
+					behavior_pred_shape = f[f'predictions/{available_keys[0]}/predicted_class'].shape
+					return Prediction.generate_default_bouts(behavior_pred_shape[0], behavior_pred_shape[1])
+				else:
+					raise MissingBehaviorException('Prediction file exists, but no behaviors present to discover shape.')
+			class_calls = f[f'predictions/{settings.behavior}/predicted_class'][:]
 
 		# Iterate over the animals
 		bout_dfs = []
 		for idx in np.arange(len(class_calls)):
 			bout_data = Bouts.from_value_vector(class_calls[idx])
-			bout_data.filter_by_settings(self._settings)
+			bout_data.filter_by_settings(settings)
 			new_df = pd.DataFrame({
 				'animal_idx': idx,
 				'start': bout_data.starts,
@@ -445,29 +548,31 @@ class Prediction(BoutTable):
 			bout_dfs.append(new_df)
 
 		bout_dfs = pd.concat(bout_dfs)
-		self._data = bout_dfs
+		return bout_dfs
 
-	def _generate_default_bouts(self):
+	@staticmethod
+	def generate_default_bouts(num_animals: int, num_frames: int):
 		"""Generates no predictions for the behavior settings.
 
 		Args:
-			settings: settings, used only for the behavior name
+			num_animals: number of animals to generate no prediction
+			num_frames: number of frames to pad for no predictions
 
 		Returns:
 			BoutTable containing 1 bout of no prediction for the entire prediction size.
 		"""
 		bout_dfs = []
-		for idx in np.arange(self._num_animals):
+		for idx in np.arange(num_animals):
 			default_df = pd.DataFrame({
 				'animal_idx': [idx],
 				'start': [0],
-				'duration': [self._num_frames],
+				'duration': [num_frames],
 				'is_behavior': [-1],
 			})
 			bout_dfs.append(default_df)
 
 		bout_dfs = pd.concat(bout_dfs)
-		self._data = bout_dfs
+		return bout_dfs
 
 
 class JABSAnnotation(BoutTable):
@@ -589,11 +694,12 @@ class Experiment:
 			pass
 
 	@classmethod
-	def from_pose_files(cls, poses: List[Path], pattern: str = PREDICTION_REGEX_STR, folder: Path = None, include_missing: bool = True):
+	def from_pose_files(cls, poses: List[Path], settings: ClassifierSettings, pattern: str = PREDICTION_REGEX_STR, folder: Path = '.', include_missing: bool = True):
 		"""Attempts to find a behavior file given pose files.
 
 		Args:
 			poses: list of pose files
+			settings: classifier settings
 			pattern: expected pattern to find the behavior file
 			folder: folder where the behavior files are located.
 			include_missing: flag to construct an experiment without behavior data (True) or to remove them (False)
@@ -618,14 +724,15 @@ class Experiment:
 		if len(matched_poses) == 0:
 			raise MissingBehaviorException('No poses were matched to behaviors.')
 
-		return cls(matched_poses, matched_behaviors)
+		return cls(matched_poses, matched_behaviors, settings)
 
 	@classmethod
-	def from_pose_file(cls, pose: Path, pattern: str = PREDICTION_REGEX_STR, folder: Path = None, include_missing: bool = True):
+	def from_pose_file(cls, pose: Path, settings: ClassifierSettings, pattern: str = PREDICTION_REGEX_STR, folder: Path = None, include_missing: bool = True):
 		"""Attempts to find a behavior file given pose file.
 
 		Args:
 			pose: pose file
+			settings: classifier settings
 			pattern: expected pattern to find the behavior file
 			folder: folder where the behavior files are located.
 			include_missing: flag to construct an experiment without behavior data (True) or to raise an error (False)
@@ -636,7 +743,7 @@ class Experiment:
 		Raises:
 			MissingBehaviorException if include_missing is False and the behavior file was not found.
 		"""
-		return cls.from_pose_files([pose], pattern, folder, include_missing)
+		return cls.from_pose_files([pose], settings, pattern, folder, include_missing)
 
 	@staticmethod
 	def get_behaviors(predictions: List[Path]):
