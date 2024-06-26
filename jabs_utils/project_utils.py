@@ -94,10 +94,11 @@ class VideoMetadata:
 		self._folder = self._original_file.parent
 		file_str = self._original_file.name
 		self._video = re.sub(f'({POSE_REGEX_STR}|{PREDICTION_REGEX_STR}|\\.avi|\\.mp4)', '', file_str)
-		time_search = re.search(TIMESTAMP_REGEX_STR, file_str)
+		time_search = re.search(TIMESTAMP_REGEX_STR, self._video)
 		video_start_time = time_search.group() if time_search is not None else '1970-01-01_00-00-00'
 		self._time = datetime.strptime(video_start_time, TIMESTAMP_FMT)
-		time_search = re.search(DATE_REGEX_STR, self._folder)
+		self._experiment = self._video[:time_search.start()] if time_search is not None else self._video
+		time_search = re.search(DATE_REGEX_STR, str(self._folder))
 		self._date_start = time_search.group() if time_search is not None else video_start_time[:10]
 
 	@property
@@ -469,7 +470,7 @@ class Prediction(BoutTable):
 		# While we can pass the data in here, it's safer not to since it will check against default required fields.
 		super().__init__(settings, None)
 
-		self._data = pd.copy(data)
+		self._data = data.copy()
 		self._data['video_name'] = video_metadata.video
 		self._data['exp_prefix'] = video_metadata.experiment
 		self._data['time'] = video_metadata.time_str
@@ -524,15 +525,15 @@ class Prediction(BoutTable):
 		Raises:
 			MissingBehaviorException if behavior file exists but contains no behavior predictions.
 		"""
-		with h5py.File(source_file, 'r') as f:
-			if settings.behavior not in f[f'predictions/{settings.behavior}'].keys():
-				available_keys = f['predictions'].keys()
+		with h5py.File(str(source_file), 'r') as in_f:
+			if settings.behavior not in in_f['predictions/'].keys():
+				available_keys = in_f['predictions'].keys()
 				if len(available_keys) > 0:
-					behavior_pred_shape = f[f'predictions/{available_keys[0]}/predicted_class'].shape
+					behavior_pred_shape = in_f[f'predictions/{available_keys[0]}/predicted_class'].shape
 					return Prediction.generate_default_bouts(behavior_pred_shape[0], behavior_pred_shape[1])
 				else:
 					raise MissingBehaviorException('Prediction file exists, but no behaviors present to discover shape.')
-			class_calls = f[f'predictions/{settings.behavior}/predicted_class'][:]
+			class_calls = in_f[f'predictions/{settings.behavior}/predicted_class'][:]
 
 		# Iterate over the animals
 		bout_dfs = []
@@ -684,7 +685,21 @@ class Experiment:
 			raise ValueError(f'Poses {len(poses)} did not match predictions {len(predictions)}.')
 
 		self._pose_files = poses
-		self._predictions = [Prediction(pred_file, settings) for pred_file in predictions]
+		self._predictions = []
+		for pose_file, pred_file in zip(poses, predictions):
+			if pred_file is not None and Path(pred_file).exists():
+				self._predictions = Prediction.from_prediction_file(pred_file, settings)
+			else:
+				with h5py.File(str(pose_file), 'r') as in_f:
+					keypoint_shape = in_f['poseest/points'].shape
+				num_frames = keypoint_shape[0]
+				# poseest v2 is single animal and only has a dim of 3
+				if len(keypoint_shape) > 3:
+					num_animals = keypoint_shape[1]
+				else:
+					num_animals = 1
+
+				self._predictions = Prediction.from_no_prediction(settings, num_frames=num_frames, num_animals=num_animals)
 
 		# If this is more than 1 video we need to do extra steps
 		if len(poses) > 1:
@@ -717,7 +732,11 @@ class Experiment:
 			if behavior_f.exists():
 				matched_poses.append(pose_f)
 				matched_behaviors.append(behavior_f)
-			else:
+			# Also check the folder with the pose file...
+			elif (Path(pose_f).parent / behavior_f.name).exists():
+				matched_poses.append(pose_f)
+				matched_behaviors.append(Path(pose_f).parent / behavior_f.name)
+			elif include_missing:
 				matched_poses.append(pose_f)
 				matched_behaviors.append(None)
 
