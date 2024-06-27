@@ -308,7 +308,7 @@ class Table:
 
 	@property
 	def settings(self):
-		return dict(self._settings)
+		return self._settings
 
 	@property
 	def data(self):
@@ -328,16 +328,8 @@ class Table:
 		Note:
 			Settings from only the first in list are carried forward
 		"""
-		all_bout_data = []
-		cur_offset = 0
 		first_settings = data_list[0].settings
-		for cur_table in data_list:
-			cur_bout_data = cur_table.data
-			cur_bout_data.shift_start(cur_offset)
-			cur_offset = cur_bout_data.starts[-1] + cur_bout_data.durations[-1]
-			all_bout_data.append(cur_bout_data)
-
-		all_bout_data = pd.concat(all_bout_data)
+		all_bout_data = pd.concat([cur_data.data for cur_data in data_list])
 		return cls(first_settings, all_bout_data)
 
 	@classmethod
@@ -358,6 +350,26 @@ class Table:
 		settings = ClassifierSettings(behavior_name, interpolate, stitch, filter_setting)
 		df = pd.read_csv(file, skiprows=2)
 		return cls(settings, df)
+
+	@staticmethod
+	def shift_merge_data(df_list: List[pd.DataFrame]) -> pd.DataFrame:
+		"""Shifts data to combine event data.
+
+		Args:
+			df_list: dataframes to concatenate together
+
+		Returns:
+			a combined dataframe where event start data has been shifted appropriately
+		"""
+		all_bout_data = []
+		cur_offset = 0
+		for cur_bout_data in df_list:
+			cur_bout_data['start'] += cur_offset
+			cur_offset = cur_bout_data['start'].iloc[-1] + cur_bout_data['duration'].iloc[-1]
+			all_bout_data.append(cur_bout_data)
+
+		all_bout_data = pd.concat(all_bout_data)
+		return all_bout_data
 
 	def to_file(self, file: Path, overwrite: bool = False):
 		"""Writes out data to file.
@@ -466,14 +478,20 @@ class Prediction(BoutTable):
 			settings: settings used for these predictions
 			data: tabular data to store
 			video_metadata: metadata parsed from originating file
+
+		Notes:
+			If the dataframe already contains video metadata fields, they will not be overwritten.
 		"""
 		# While we can pass the data in here, it's safer not to since it will check against default required fields.
 		super().__init__(settings, None)
 
 		self._data = data.copy()
-		self._data['video_name'] = video_metadata.video
-		self._data['exp_prefix'] = video_metadata.experiment
-		self._data['time'] = video_metadata.time_str
+		if 'video_name' not in data.keys():
+			self._data['video_name'] = video_metadata.video
+		if 'exp_prefix' not in data.keys():
+			self._data['exp_prefix'] = video_metadata.experiment
+		if 'time' not in data.keys():
+			self._data['time'] = video_metadata.time_str
 
 		self._file_meta = video_metadata
 
@@ -510,6 +528,24 @@ class Prediction(BoutTable):
 		video_metadata = VideoMetadata(file)
 
 		return cls(settings, bout_df, video_metadata)
+
+	@classmethod
+	def combine_data(cls, data_list: List(Table)):
+		"""Combines multiple prediction tables together.
+
+		Args:
+			data_list: Time-sorted list of Table objects to merge together
+
+		Returns:
+			Table object containing the table data concatenated together
+
+		Note:
+			Settings from only the first in list are carried forward
+		"""
+		first_settings = data_list[0].settings
+		all_bout_data = pd.concat([cur_data.data for cur_data in data_list])
+		first_video_metadata = data_list[0]._file_meta
+		return cls(first_settings, all_bout_data, first_video_metadata)
 
 	@staticmethod
 	def generate_bout_table(source_file: Path, settings: ClassifierSettings):
@@ -688,7 +724,7 @@ class Experiment:
 		self._predictions = []
 		for pose_file, pred_file in zip(poses, predictions):
 			if pred_file is not None and Path(pred_file).exists():
-				self._predictions = Prediction.from_prediction_file(pred_file, settings)
+				self._predictions.append(Prediction.from_prediction_file(pred_file, settings))
 			else:
 				with h5py.File(str(pose_file), 'r') as in_f:
 					keypoint_shape = in_f['poseest/points'].shape
@@ -699,7 +735,7 @@ class Experiment:
 				else:
 					num_animals = 1
 
-				self._predictions = Prediction.from_no_prediction(settings, num_frames=num_frames, num_animals=num_animals)
+				self._predictions.append(Prediction.from_no_prediction(settings, num_frames=num_frames, num_animals=num_animals))
 
 		# If this is more than 1 video we need to do extra steps
 		if len(poses) > 1:
@@ -777,7 +813,7 @@ class Experiment:
 			try:
 				with h5py.File(cur_prediction_file, 'r') as f:
 					new_behaviors = list(f['predictions'].keys())
-					behavior_list = set(behavior_list + new_behaviors)
+					behavior_list = set(list(behavior_list) + new_behaviors)
 			# Ignore when a file doesn't exist or 'predictions' aren't present
 			except (FileNotFoundError, KeyError):
 				pass
@@ -796,4 +832,5 @@ class Experiment:
 		Raises:
 			MissingBehaviorException if behavior was not predicted for this experiment.
 		"""
+		all_bout_data = Prediction.combine_data(self._predictions)
 		return all_bout_data
