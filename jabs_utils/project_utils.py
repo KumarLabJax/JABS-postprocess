@@ -673,7 +673,25 @@ class JabsProject:
 		Returns:
 			JabsProject object containing all the poses in the ltm project folder.
 		"""
-		raise NotImplementedError()
+		video_filenames = []
+		matched_exp_idxs = {}
+		discovered_pose_files = Path(project_folder).glob(f'**/*{POSE_REGEX_STR}')
+		# Match files with same experiment
+		for i, cur_pose_file in enumerate(discovered_pose_files):
+			next_metadata = VideoMetadata(cur_pose_file)
+			video_filenames.append(cur_pose_file)
+			updated_exp_ids = matched_exp_idxs.get(next_metadata.experiment)
+			updated_exp_ids.append(i)
+			video_filenames[next_metadata.experiment] = updated_exp_ids
+
+		# Import experiment data
+		experiments = []
+		for _, meta_idxs in matched_exp_idxs.items():
+			experiment_poses = [x for i, x in enumerate(video_filenames) if i in meta_idxs]
+			new_experiment = Experiment.from_pose_files(experiment_poses)
+			experiments.append(new_experiment)
+
+		return cls(experiments)
 
 	@classmethod
 	def from_pose_files(cls, poses: List[Path]):
