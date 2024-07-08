@@ -800,41 +800,43 @@ class JabsProject:
 		self._experiments = experiments
 
 	@classmethod
-	def from_ltm_folder(cls, project_folder: Path):
-		"""Constructor based on longterm monitoring folder structure.
+	def from_folder(cls, project_folder: Path, settings: ClassifierSettings):
+		"""Constructor based on a folder structure.
 
 		Args:
-			project_folder: Longterm monitoring project folder. Folder is recursively searched for all pose files. Pose files are expected to follow the structure of [Experiment_ID]_%Y-%m-%d_%H-%M-%S.
+			project_folder: Project folder. Folder is recursively searched for all pose files. Pose files are expected to follow the structure of [Experiment_ID]_%Y-%m-%d_%H-%M-%S.
+			settings: classifier settings to pass to experiment.
 
 		Returns:
-			JabsProject object containing all the poses in the ltm project folder.
+			JabsProject object containing all the poses in the project folder.
 		"""
 		video_filenames = []
 		matched_exp_idxs = {}
-		discovered_pose_files = Path(project_folder).glob(f'**/*{POSE_REGEX_STR}')
+		discovered_pose_files = cls.find_pose_files(project_folder)
 		# Match files with same experiment
 		for i, cur_pose_file in enumerate(discovered_pose_files):
 			next_metadata = VideoMetadata(cur_pose_file)
 			video_filenames.append(cur_pose_file)
-			updated_exp_ids = matched_exp_idxs.get(next_metadata.experiment)
+			updated_exp_ids = matched_exp_idxs.get(next_metadata.experiment, [])
 			updated_exp_ids.append(i)
-			video_filenames[next_metadata.experiment] = updated_exp_ids
+			matched_exp_idxs[next_metadata.experiment] = updated_exp_ids
 
 		# Import experiment data
 		experiments = []
 		for _, meta_idxs in matched_exp_idxs.items():
 			experiment_poses = [x for i, x in enumerate(video_filenames) if i in meta_idxs]
-			new_experiment = Experiment.from_pose_files(experiment_poses)
+			new_experiment = Experiment.from_pose_files(experiment_poses, settings)
 			experiments.append(new_experiment)
 
 		return cls(experiments)
 
 	@classmethod
-	def from_pose_files(cls, poses: List[Path]):
+	def from_pose_files(cls, poses: List[Path], settings: ClassifierSettings):
 		"""Constructor based on a list of pose files.
 
 		Args:
 			poses: Pose files that may or may not have prediction files.
+			settings: classifier settings to pass to experiment.
 
 		Returns:
 			JabsProject object containing each pose file as an experiment (pose + prediction).
@@ -842,7 +844,7 @@ class JabsProject:
 		experiments = []
 		for cur_pose in poses:
 			try:
-				new_experiment = Experiment.from_pose_file(cur_pose)
+				new_experiment = Experiment.from_pose_file(cur_pose, settings)
 				experiments.append(new_experiment)
 			except MissingBehaviorException:
 				pass
@@ -852,10 +854,48 @@ class JabsProject:
 
 		return cls(experiments)
 
-	@property
-	def behaviors(self):
-		"""Gets the behavior list for this project."""
-		return self._behaviors
+	@staticmethod
+	def find_pose_files(path: Path):
+		"""Discovers pose files in a folder.
+
+		Args:
+			path: Folder to discover pose files
+
+		Returns:
+			List of pose files discovered in the folder
+		"""
+		return Path(path).glob(f'**/*{POSE_REGEX_STR}')
+
+	@staticmethod
+	def find_behaviors(path: Path):
+		"""Gets the behavior list for this project folder.
+
+		Args:
+			path: Path to search for behaviors
+
+		Returns:
+			list of behavior keys in the folder
+		"""
+		found_poses = JabsProject.find_pose_files(path)
+		found_predictions = []
+		for cur_pose in found_poses:
+			try:
+				cur_prediction = Experiment.get_prediction_file(cur_pose)
+				found_predictions.append(cur_prediction)
+			except MissingBehaviorException:
+				pass
+		found_behaviors = Experiment.get_behaviors(found_predictions)
+		return found_behaviors
+
+	def get_bouts(self):
+		"""Generates the bout table for the entire experiment.
+
+		Returns:
+			BoutTable containing the behavioral bouts for the entire experiment
+		"""
+		all_bouts = [cur_experiment.get_behavior_bouts() for cur_experiment in self._experiments]
+		all_bouts = Prediction.combine_data(all_bouts)
+		return all_bouts
 
 
 class Experiment:
@@ -915,20 +955,16 @@ class Experiment:
 		Raises:
 			MissingBehaviorException if include_missing is False and there are no behavior files for the provided poses.
 		"""
-		pose_filenames = [Path(x).name for x in poses]
-		search_behaviors = [Path(folder) / Path(re.sub(POSE_REGEX_STR, PREDICTION_REGEX_STR, x)) for x in pose_filenames]
 		matched_poses, matched_behaviors = [], []
-		for pose_f, behavior_f in zip(poses, search_behaviors):
-			if behavior_f.exists():
+		for pose_f in poses:
+			try:
+				behavior_f = Experiment.get_prediction_file(pose_f, folder)
 				matched_poses.append(pose_f)
 				matched_behaviors.append(behavior_f)
-			# Also check the folder with the pose file...
-			elif (Path(pose_f).parent / behavior_f.name).exists():
-				matched_poses.append(pose_f)
-				matched_behaviors.append(Path(pose_f).parent / behavior_f.name)
-			elif include_missing:
-				matched_poses.append(pose_f)
-				matched_behaviors.append(None)
+			except MissingBehaviorException:
+				if include_missing:
+					matched_poses.append(pose_f)
+					matched_behaviors.append(None)
 
 		if len(matched_poses) == 0:
 			raise MissingBehaviorException('No poses were matched to behaviors.')
@@ -955,6 +991,30 @@ class Experiment:
 		return cls.from_pose_files([pose], settings, pattern, folder, include_missing)
 
 	@staticmethod
+	def get_prediction_file(pose_f: Path, folder: Path = '.'):
+		"""Identifies a prediction file given a pose file.
+
+		Args:
+			pose_f: pose file to find the prediction file
+			folder: folder in which the predictions are located
+
+		Returns:
+			prediction filename
+
+		Raises:
+			MissingBehaviorException if behavior file was not found
+		"""
+		behavior_f = Path(folder) / Path(re.sub(POSE_REGEX_STR, PREDICTION_REGEX_STR, str(pose_f)))
+		if behavior_f.exists():
+			return behavior_f
+		# Also check the folder with the pose file...
+		behavior_f_2 = Path(pose_f).parent / behavior_f.name
+		if (behavior_f_2).exists():
+			return behavior_f_2
+
+		raise MissingBehaviorException(f'No behavior prediction file found for {pose_f} (searched {behavior_f} and {behavior_f_2}).')
+
+	@staticmethod
 	def get_behaviors(predictions: List[Path]):
 		"""Behaviors available given a list of predictions.
 		
@@ -974,11 +1034,8 @@ class Experiment:
 
 		return behavior_list
 
-	def get_behavior_bouts(self, behavior_settings: ClassifierSettings):
+	def get_behavior_bouts(self):
 		"""Generates behavior bout data for a given behavior.
-		
-		Args:
-			behavior_settings: settings associated with a given behavior
 
 		Returns:
 			BoutTable containing the bout prediction data
