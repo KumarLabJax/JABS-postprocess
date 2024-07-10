@@ -46,7 +46,7 @@ def generate_behavior_tables(args, behavior_args: {}):
 		behavior_args.get('stitch_gap', None),
 		behavior_args.get('min_bout_length', None),
 	)
-	project = JabsProject.from_folder(args.project_folder, behavior_settings)
+	project = JabsProject.from_prediction_folder(args.project_folder, behavior_settings)
 	bout_table = project.get_bouts()
 	bout_out_file = f'{args.out_prefix}_bouts.csv'
 	bout_table.to_file(bout_out_file, True)

@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import re
 import os
+import enum
 from pathlib import Path
 from datetime import datetime
 from typing import List
@@ -12,6 +13,7 @@ from typing import List
 BEHAVIOR_CLASSIFY_VERSION = 1
 POSE_REGEX_STR = '_pose_est_v[2-6].h5'
 PREDICTION_REGEX_STR = '_behavior.h5'
+FEATURE_REGEX_STR = 'features.h5'
 DATE_REGEX_STR = '[0-9]{4}-[0-9]{2}-[0-9]{2}'
 DATE_FMT = '%Y-%m-%d'
 TIME_REGEX_STR = '[0-9]{2}-[0-9]{2}-[0-9]{2}'
@@ -23,6 +25,13 @@ TIMESTAMP_FMT = f'{DATE_FMT}_{TIME_FMT}'
 class MissingBehaviorException(ValueError):
 	"""Custom error for behavior-related missing data."""
 	def __init__(self, message):
+		"""Default initialization."""
+		super().__init__(message)
+
+
+class MissingFeatureException(ValueError):
+	"""Custom error for feature-related missing data."""
+	def __init(self, message):
 		"""Default initialization."""
 		super().__init__(message)
 
@@ -77,6 +86,136 @@ class ClassifierSettings:
 
 	def __repr__(self):
 		return self.__str__()
+
+
+class Relation(enum.IntEnum):
+	"""A relation operator."""
+	LESS_THAN = 0
+	LESS_THAN_EQUAL = 1
+	GREATER_THAN = 2
+	GREATER_THAN_EQUAL = 3
+
+	@classmethod
+	def from_str(cls, s: str):
+		"""Creates a Relation from a string.
+
+		Args:
+			s: string to try and conform to a relation
+
+		Returns:
+			The closest enum to the input
+
+		Raises:
+			TypeError if there isn't a closest enum
+		"""
+		s_lower = s.lower()
+		if s_lower in ['<', 'lt', 'less than']:
+			return cls.LESS_THAN
+		elif s_lower in ['<=', '=<', 'lte', 'less than equal', 'less than or equal']:
+			return cls.LESS_THAN_EQUAL
+		elif s_lower in ['>', 'gt', 'greater than']:
+			return cls.GREATER_THAN
+		elif s_lower in ['>=', '=>', 'gte', 'greater than equal', 'greater than or equal']:
+			return cls.GREATER_THAN_EQUAL
+		raise ValueError(f'Invalid relationship operator, supplied: "{s}"')
+
+	def __str__(self):
+		strs = ['<', '<=', '>', '>=']
+		return strs[self.value]
+
+	def __repr__(self):
+		return self.__str__()
+
+
+class FeatureRule:
+	"""A single rule applied to a feature."""
+	def __init__(self, feature_name: str, threshold: float, relation: Relation, feature_module: str = None):
+		"""Constructs a feature filter rule.
+
+		Args:
+			feature_name: feature to apply the filter on
+			threshold: threshold value for a decision boundary
+			relation: the relation for positive events of this rule
+			feature_module: (optional) module the feature belongs to. Only required if a feature exists in 2 different modules
+		"""
+		self._feature = feature_name
+		self._threshold = threshold
+		self._relation = relation if isinstance(relation, Relation) else Relation.from_str(relation)
+
+	@property
+	def feature(self):
+		return self._feature
+
+	@property
+	def threshold(self):
+		return self._threshold
+
+	@property
+	def relation(self):
+		return self._relation
+
+	def __str__(self):
+		return f'{self._feature} {self._relation} {self._threshold}'
+
+	def __repr__(self):
+		return self.__str__()
+
+
+class WindowFeatureRule(FeatureRule):
+	"""A rule applied to window features."""
+	def __init__(self, feature_name: str, window_size: int, window_op: str, threshold: float, relation: Relation, feature_module: str = None):
+		"""Constructs a window feature filter rule.
+
+		Args:
+			feature_name: feature to apply the filter on
+			window_size: 
+			threshold: threshold value for a decision boundary
+			relation: the relation for positive events of this rule
+			feature_module: (optional) module the feature belongs to. Only required if a feature exists in 2 different modules
+		"""
+		super().__init__(feature_name, threshold, relation, feature_module)
+
+		self._window_size = window_size
+		self._window_op = window_op
+
+	@property
+	def window_size(self):
+		return self._window_size
+
+	@property
+	def window_op(self):
+		return self._window_op
+
+	def __str__(self):
+		return f'{self._window_op} {self._feature} {self._relation} {self._threshold}, window_size = {self._window_size}'
+
+	def __repr__(self):
+		return self.__str__()
+		
+
+class FeatureSettings(ClassifierSettings):
+	"""Settings associated with a feature-based classifier."""
+	def __init__(self, behavior: str, rules: List[FeatureRule], interpolate: int = 5, stitch: int = 5, min_bout: int = 5):
+		"""Initializes a feature settings object.
+
+		Args:
+			behavior: string containing the name of the behavior
+			rules: list of rules which are combined with an "and" operation for defining an event classifier
+			interpolate: number of frames where predictions will be interpolated when data is missing
+			stitch: number of frames between "behavior" predictions that will be merged
+			min_bout: minimum number of frames for "behavior" predictions to remain
+		"""
+		super().__init__(behavior, interpolate, stitch, min_bout)
+		if len(rules) == 0:
+			raise ValueError('No rules provided for detecting events.')
+		self._rules = rules
+
+	@property
+	def rules(self):
+		return self._rules
+
+	def __str__(self):
+		return f'Settings: behavior={self._behavior}, interpolate={self._interpolate}, stitch={self._stitch}, filter={self._min_bout}, rules: {" and ".join([str(x) for x in self._rules])}'
 
 
 class VideoMetadata:
@@ -648,6 +787,54 @@ class Prediction(BoutTable):
 		return cls(settings, bout_df, video_metadata)
 
 	@classmethod
+	def from_feature_file(cls, feature_file: Path, feature_settings: FeatureSettings):
+		"""Generates predictions from feature-based classification.
+
+		Args:
+			feature_file: cached feature file to classify
+			feature_settings: settings for classification
+
+		Returns:
+			Prediction object based on feature thresholds in settings
+		"""
+		feature_obj = JABSFeature(feature_file)
+
+		classification_vectors = []
+		for cur_feature_rule in feature_settings.rules:
+			if isinstance(cur_feature_rule, WindowFeatureRule):
+				feature_vector = feature_obj.get_window_feature(cur_feature_rule.feature, cur_feature_rule.window_size, cur_feature_rule.window_op)
+			else:
+				feature_vector = feature_obj.get_per_frame_feature(cur_feature_rule.feature)
+
+			if cur_feature_rule.relation == Relation.LESS_THAN:
+				call_vector = feature_vector < cur_feature_rule.threshold
+			elif cur_feature_rule.relation == Relation.LESS_THAN_EQUAL:
+				call_vector = feature_vector <= cur_feature_rule.threshold
+			elif cur_feature_rule.relation == Relation.GREATER_THAN:
+				call_vector = feature_vector > cur_feature_rule.threshold
+			elif cur_feature_rule.relation == Relation.GREATER_THAN_EQUAL:
+				call_vector = feature_vector >= cur_feature_rule.threshold
+			else:
+				raise ValueError(f'Rule relation {cur_feature_rule.relation} not supported (full rule: {cur_feature_rule}).')
+
+			classification_vectors.append(call_vector)
+
+		classification_vectors = np.stack(classification_vectors)
+		classification_vectors = np.all(classification_vectors, axis=0)
+
+		bout_data = Bouts.from_value_vector(classification_vectors)
+		bout_data.filter_by_settings(feature_settings)
+
+		bout_df = pd.DataFrame({
+			'animal_idx': feature_obj.animal_idx,
+			'start': bout_data.starts,
+			'duration': bout_data.durations,
+			'is_behavior': bout_data.values,
+		})
+
+		return cls(feature_settings, bout_df, feature_obj.video_metadata)
+
+	@classmethod
 	def from_no_prediction(cls, settings: ClassifierSettings, num_frames: int, num_animals: int, file: Path):
 		"""Initializes a bout table with no predictions made.
 
@@ -800,11 +987,11 @@ class JabsProject:
 		self._experiments = experiments
 
 	@classmethod
-	def from_folder(cls, project_folder: Path, settings: ClassifierSettings):
-		"""Constructor based on a folder structure.
+	def from_prediction_folder(cls, project_folder: Path, settings: ClassifierSettings):
+		"""Constructor based on a predction folder structure.
 
 		Args:
-			project_folder: Project folder. Folder is recursively searched for all pose files. Pose files are expected to follow the structure of [Experiment_ID]_%Y-%m-%d_%H-%M-%S.
+			project_folder: Prediction project folder. Folder is recursively searched for all pose files.
 			settings: classifier settings to pass to experiment.
 
 		Returns:
@@ -827,6 +1014,29 @@ class JabsProject:
 			experiment_poses = [x for i, x in enumerate(video_filenames) if i in meta_idxs]
 			new_experiment = Experiment.from_pose_files(experiment_poses, settings)
 			experiments.append(new_experiment)
+
+		return cls(experiments)
+
+	@classmethod
+	def from_feature_folder(cls, project_folder, feature_settings: FeatureSettings):
+		"""Constructor based on a feature heuristic.
+
+		Args:
+			project_folder: Project folder with cached feature data.
+			feature_settings: feature settings for constructing events
+
+		Returns:
+			JabsProject object with experimental results for feature based classification
+
+		Todo:
+			Expose feature folder searching...
+		"""
+		discovered_pose_files = cls.find_pose_files(project_folder)
+
+		experiments = []
+		for cur_pose in discovered_pose_files:
+			new_experiment = Experiment.from_features(cur_pose, feature_settings)
+			experiments.add(new_experiment)
 
 		return cls(experiments)
 
@@ -900,7 +1110,26 @@ class JabsProject:
 
 class Experiment:
 	"""One or more pose files with associated behavior prediction files."""
-	def __init__(self, poses: List[Path], predictions: List[Path], settings: ClassifierSettings):
+	def __init__(self, poses: List[Path], predictions: List[Prediction]):
+		"""Initializes an experiment object.
+
+		Args:
+			poses: list of pose files
+			predictions: list of prediction objects associated with the pose files
+
+		"""
+		self._pose_files = poses
+		self._predictions = predictions
+
+		# If this is more than 1 video we need to do extra steps
+		if len(poses) > 1:
+			# TODO:
+			# Handle identity
+			# Handle time sorting
+			pass
+
+	@classmethod
+	def from_prediction_files(cls, poses: List[Path], predictions: List[Path], settings: ClassifierSettings):
 		"""Initializes an experiment object.
 
 		Args:
@@ -914,11 +1143,10 @@ class Experiment:
 		if len(poses) != len(predictions):
 			raise ValueError(f'Poses {len(poses)} did not match predictions {len(predictions)}.')
 
-		self._pose_files = poses
-		self._predictions = []
+		predictions = []
 		for pose_file, pred_file in zip(poses, predictions):
 			if pred_file is not None and Path(pred_file).exists():
-				self._predictions.append(Prediction.from_prediction_file(pred_file, settings))
+				predictions.append(Prediction.from_prediction_file(pred_file, settings))
 			else:
 				with h5py.File(str(pose_file), 'r') as in_f:
 					keypoint_shape = in_f['poseest/points'].shape
@@ -929,21 +1157,16 @@ class Experiment:
 				else:
 					num_animals = 1
 
-				self._predictions.append(Prediction.from_no_prediction(settings, num_frames=num_frames, num_animals=num_animals))
+				predictions.append(Prediction.from_no_prediction(settings, num_frames=num_frames, num_animals=num_animals))
 
-		# If this is more than 1 video we need to do extra steps
-		if len(poses) > 1:
-			# TODO:
-			# Handle identity
-			# Handle time sorting
-			pass
+		return cls(poses, predictions)
 
 	@classmethod
-	def from_pose_files(cls, poses: List[Path], settings: ClassifierSettings, pattern: str = PREDICTION_REGEX_STR, folder: Path = '.', include_missing: bool = True):
+	def from_pose_files(cls, pose_files: List[Path], settings: ClassifierSettings, pattern: str = PREDICTION_REGEX_STR, folder: Path = '.', include_missing: bool = True):
 		"""Attempts to find a behavior file given pose files.
 
 		Args:
-			poses: list of pose files
+			pose_files: list of pose files
 			settings: classifier settings
 			pattern: expected pattern to find the behavior file
 			folder: folder where the behavior files are located.
@@ -956,7 +1179,7 @@ class Experiment:
 			MissingBehaviorException if include_missing is False and there are no behavior files for the provided poses.
 		"""
 		matched_poses, matched_behaviors = [], []
-		for pose_f in poses:
+		for pose_f in pose_files:
 			try:
 				behavior_f = Experiment.get_prediction_file(pose_f, folder)
 				matched_poses.append(pose_f)
@@ -969,14 +1192,14 @@ class Experiment:
 		if len(matched_poses) == 0:
 			raise MissingBehaviorException('No poses were matched to behaviors.')
 
-		return cls(matched_poses, matched_behaviors, settings)
+		return cls.from_prediction_files(matched_poses, matched_behaviors, settings)
 
 	@classmethod
-	def from_pose_file(cls, pose: Path, settings: ClassifierSettings, pattern: str = PREDICTION_REGEX_STR, folder: Path = None, include_missing: bool = True):
+	def from_pose_file(cls, pose_file: Path, settings: ClassifierSettings, pattern: str = PREDICTION_REGEX_STR, folder: Path = None, include_missing: bool = True):
 		"""Attempts to find a behavior file given pose file.
 
 		Args:
-			pose: pose file
+			pose_file: pose file
 			settings: classifier settings
 			pattern: expected pattern to find the behavior file
 			folder: folder where the behavior files are located.
@@ -988,7 +1211,49 @@ class Experiment:
 		Raises:
 			MissingBehaviorException if include_missing is False and the behavior file was not found.
 		"""
-		return cls.from_pose_files([pose], settings, pattern, folder, include_missing)
+		return cls.from_pose_files([pose_file], settings, pattern, folder, include_missing)
+
+	@classmethod
+	def from_features(cls, pose_file: Path, feature_settings: FeatureSettings):
+		"""Constructs an experiment from feature-based classifications.
+
+		Args:
+			pose_file: pose file for this experiment
+			feature_settings: settings describing the feature-based classification
+
+		Returns:
+			Experiment containing the feature-based classification
+		"""
+		feature_files = cls.find_features(pose_file)
+
+		predictions = []
+		for feature_file in feature_files:
+			predictions.append(Prediction.from_feature_file(feature_file, feature_settings))
+
+		return cls([pose_file], predictions)
+
+	@staticmethod
+	def find_features(pose: Path, feature_folder: Path = Path('.')):
+		"""Gets the feature data filenames for a given pose file.
+
+		Args:
+			pose: pose file to identify the feature files
+			feature_folder: folder in which features were exported
+
+		Returns:
+			List of feature files, one for each animal
+
+		Raises:
+			MissingFeatureException if no feature files found
+		"""
+		feature_folder = Path(feature_folder) / Path(pose).stem
+		if not os.path.exists(feature_folder):
+			raise MissingFeatureException(f'Feature folder not found for {Path(pose).stem} (searching {feature_folder}).')
+
+		found_feature_files = Path(feature_folder).glob(f'**/*{FEATURE_REGEX_STR}')
+		if len(found_feature_files) == 0:
+			raise MissingFeatureException(f'No features present in folder {feature_folder}.')
+		return found_feature_files
 
 	@staticmethod
 	def get_prediction_file(pose_f: Path, folder: Path = '.'):
@@ -1045,3 +1310,140 @@ class Experiment:
 		"""
 		all_bout_data = Prediction.combine_data(self._predictions)
 		return all_bout_data
+
+
+class JABSFeature:
+	"""Methods to interact with JABS feature data."""
+	def __init__(self, feature_file: Path):
+		"""Initializes a feature object.
+
+		Args:
+			feature_file: file to interact with feature data
+		"""
+		assert os.path.exists(feature_file)
+
+		# Transforms feature file into a metadata object
+		# Note that this expects /path/to/feature/files/[POSE_FILE]/[ANIMAL_IDX]/features.h5 as the structure
+		pose_file = str(Path(*Path(feature_file).parts[:-2])) + '.h5'
+		self._video_metadata = VideoMetadata(pose_file)
+		self._animal_idx = int(Path(feature_file).parts[-2])
+		self._file = feature_file
+		# _populate_window_ops will populate modules as well, but may fail if window features are not cached...
+		# Fall back to only populate per-frame keys
+		try:
+			self._populate_window_ops()
+		except KeyError:
+			self._populate_per_frame()
+
+	@property
+	def video_metadata(self):
+		return self._video_metadata
+	
+	@property
+	def animal_idx(self):
+		return self._animal_idx
+
+	@property
+	def feature_keys(self):
+		"""Dataframe containing the available feature keys."""
+		return self._feature_keys.copy()
+
+	def get_per_frame_feature(self, feature_key: str, feature_module: str = None):
+		"""Retrieves the stored feature vector with a given key.
+
+		Args:
+			feature_key: key of the feature to retrieve
+			feature_module: Optional module which the features belong to
+
+		Returns:
+			np.ndarray containing the feature data
+
+		Raises:
+			ValueError if feature module is not provided and doesn't map uniquely
+			KeyError if feature key does not exist
+		"""
+		if feature_module is None:
+			feature_module = self.discover_feature_module(feature_key)
+
+		if not (
+			(self._feature_keys['module'] == feature_module)
+			& (self._feature_keys['feature'] == feature_key)
+		).any():
+			raise KeyError('Module and Feature key not available.')
+
+		feature_path = f'features/per_frame/{feature_module} {feature_key}'
+		with h5py.File(self._file, 'r') as f:
+			feature_data = f[feature_path][:]
+
+		return feature_data
+
+	def get_window_feature(self, feature_key: str, window_size: int, window_op: str, feature_module: str = None):
+		"""Retrieves the stored feature vector from a window feature.
+
+		Args:
+			feature_key: key of the feature to retrieve
+			window_size: window size of the window feature
+			window_op: window operation for the feature
+			feature_module: Optional module which the features belong to
+
+		Returns:
+			np.ndarray containing the feature data
+
+		Raises:
+			KeyError if the feature key, window size, or window op are not present
+		"""
+		if feature_module is None:
+			feature_module = self.discover_feature_module(feature_key)
+
+		if 'window_op' not in self._feature_keys:
+			raise KeyError(f'Feature file {self._file} does not contain window feature data.')
+		if not (
+			(self._feature_keys['module'] == feature_module)
+			& (self._feature_keys['window_op'] == window_op)
+			& (self._feature_keys['feature'] == feature_key)
+		).any():
+			raise KeyError('Module, Window Op, and Feature key not available.')
+
+		feature_key = f'features/window_features_{window_size}/{feature_module} {window_op} {feature_key}'
+
+		with h5py.File(self._file, 'r') as f:
+			feature_data = f[feature_key][:]
+
+		return feature_data
+
+	def discover_feature_module(self, feature_key: str):
+		"""Discovers the feature module given a key.
+
+		Args:
+			feature_key: feature to identify the module name
+
+		Returns:
+			module string of the feature
+
+		Raises:
+			ValueError if module is not unique
+		"""
+		discovered_feature_module = np.unique(self._feature_keys.loc[self._feature_keys['feature'] == feature_key, 'module'])
+		if len(discovered_feature_module) != 1:
+			raise ValueError(f'Feature {feature_key} does not map uniquely to a feature module. Found modules: {discovered_feature_module}')
+		return discovered_feature_module[0]
+
+	def _populate_per_frame(self):
+		"""Populates the available module-feature pairs."""
+		with h5py.File(self._file, 'r') as f:
+			available_features = list(f['features/per_frame'].keys())
+
+		self._feature_keys = pd.DataFrame([x.split(' ', 1) for x in available_features], columns=['module', 'feature'])
+
+	def _populate_window_ops(self):
+		"""Populates the available window operation data."""
+		with h5py.File(self._file, 'r') as f:
+			feature_grps = list(f['features'].keys())
+		self._window_sizes = [x.split('_')[2] for x in feature_grps if x.startswith('window_features_')]
+
+		if len(self._window_sizes) > 0:
+			with h5py.File(self._file, 'r') as f:
+				window_keys = list(f[f'features/window_features_{self._window_sizes[0]}'].keys())
+			self._feature_keys = pd.DataFrame([x.split(' ', 2) for x in window_keys], columns=['module', 'window_op', 'feature'])
+		else:
+			raise KeyError('No window features in this feature file.')
