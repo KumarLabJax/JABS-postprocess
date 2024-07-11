@@ -109,15 +109,35 @@ class Relation(enum.IntEnum):
 			TypeError if there isn't a closest enum
 		"""
 		s_lower = s.lower()
-		if s_lower in ['<', 'lt', 'less than']:
+		if s_lower in cls.get_less_than_options():
 			return cls.LESS_THAN
-		elif s_lower in ['<=', '=<', 'lte', 'less than equal', 'less than or equal']:
+		elif s_lower in cls.get_less_than_equal_options():
 			return cls.LESS_THAN_EQUAL
-		elif s_lower in ['>', 'gt', 'greater than']:
+		elif s_lower in cls.get_geater_than_options():
 			return cls.GREATER_THAN
-		elif s_lower in ['>=', '=>', 'gte', 'greater than equal', 'greater than or equal']:
+		elif s_lower in cls.get_geater_than_equal_options():
 			return cls.GREATER_THAN_EQUAL
 		raise ValueError(f'Invalid relationship operator, supplied: "{s}"')
+
+	@staticmethod
+	def get_less_than_options():
+		return ['<', 'lt', 'less than']
+
+	@staticmethod
+	def get_less_than_equal_options():
+		return ['<=', '=<', 'lte', 'less than equal', 'less than or equal']
+
+	@staticmethod
+	def get_geater_than_options():
+		return ['>', 'gt', 'greater than']
+
+	@staticmethod
+	def get_geater_than_equal_options():
+		return ['>=', '=>', 'gte', 'greater than equal', 'greater than or equal']
+
+	@staticmethod
+	def get_all_options():
+		return Relation.get_less_than_options() + Relation.get_less_than_equal_options() + Relation.get_geater_than_options() + Relation.get_geater_than_equal_options()
 
 	def __str__(self):
 		strs = ['<', '<=', '>', '>=']
