@@ -33,7 +33,7 @@ def main(argv):
 	parser.add_argument('--out_prefix', help='File prefix to write output tables (prefix_bouts.csv and prefix_summaries.csv), default=behavior', default='behavior', type=str)
 	parser.add_argument('--out_bin_size', help='Time duration used in binning the results, default=60', default=60, type=int)
 	parser.add_argument('--overwrite', help='Overwrites output files, default=False', default=False, action='store_true')
-	parser.add_argument('--behavior', help='Name of behavior', require=True, type=str)
+	parser.add_argument('--behavior', help='Name of behavior', required=True, type=str)
 	parser.add_argument('--interpolate_size', help='Maximum number of frames in which missing data will be interpolated, default=5', default=5, type=int)
 	parser.add_argument('--stitch_gap', help='Number of frames in which frames sequential behavior prediction bouts will be joined, default=5', default=5, type=int)
 	parser.add_argument('--min_bout_length', help='Minimum number of frames in which a behavior prediction must be to be considered, default=5', default=5, type=int)
@@ -50,7 +50,7 @@ def main(argv):
 	rules = []
 	for feature_rule in by_sets(argv, '--feature_key'):
 		new_args = rule_parser.parse_args(feature_rule)
-		new_rule = FeatureRule(new_args.feature, new_args.threshold, new_args.relation)
+		new_rule = FeatureRule(new_args.feature_key, new_args.threshold, new_args.relation)
 		rules.append(new_rule)
 
 	f_settings = FeatureSettings(args.behavior, rules, args.interpolate_size, args.stitch_gap, args.min_bout_length)

@@ -544,13 +544,15 @@ class Table:
 		if os.path.exists(file) and not overwrite:
 			raise FileExistsError(f'Out_file {file} exists and overwriting was not selected.')
 		header_df = pd.DataFrame({
-			# 'Project Folder': [self._settings.project_folder],
 			'Behavior': [self._settings.behavior],
 			'Interpolate Size': [self._settings.interpolate],
 			'Stitch Gap': [self._settings.stitch],
 			'Min Bout Length': [self._settings.min_bout],
 			# 'Out Bin Size': [self._settings.out_bin_size],
 		})
+		if isinstance(self._settings, FeatureSettings):
+			header_df['Feature Rules'] = ' and '.join([str(x) for x in self._settings.rules])
+
 		with open(file, 'w') as f:
 			header_df.to_csv(f, header=True, index=False)
 			self._data.to_csv(f, header=True, index=False)
@@ -1065,7 +1067,7 @@ class JabsProject:
 		experiments = []
 		for cur_pose in discovered_pose_files:
 			new_experiment = Experiment.from_features(cur_pose, feature_settings, feature_folder)
-			experiments.add(new_experiment)
+			experiments.append(new_experiment)
 
 		return cls(experiments)
 
