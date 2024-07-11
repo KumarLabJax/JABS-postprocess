@@ -583,9 +583,7 @@ class BoutTable(Table):
 			BinTable representation of this data
 		"""
 		if 'longterm_idx' not in self.data.keys():
-			self.data['longterm_idx'] = 1
-		else:
-			added_dummy_longterm = False
+			self.data['longterm_idx'] = self.data['animal_idx'] + 1
 		grouped_df = self.data.groupby(['exp_prefix', 'longterm_idx'])
 		all_results = []
 		for cur_group, cur_data in grouped_df:
@@ -817,12 +815,22 @@ class Prediction(BoutTable):
 			else:
 				raise ValueError(f'Rule relation {cur_feature_rule.relation} not supported (full rule: {cur_feature_rule}).')
 
+			# Convert back to 3-state (1: behavior, 0: not behavior, -1: no feature)
+			call_vector = call_vector.astype(np.int8)
+			call_vector[np.isnan(feature_vector)] = -1
+
 			classification_vectors.append(call_vector)
 
 		classification_vectors = np.stack(classification_vectors)
-		classification_vectors = np.all(classification_vectors, axis=0)
+		# Note that np.all() casts to bool, so "true" here is all elements are either behavior or no feature
+		# any 0 values (not behavior) in a row will always evaluate to "false", yielding the desired "and" operation
+		final_calls = np.all(classification_vectors, axis=0).astype(np.int8)
+		# Note:
+		# We could allow the user to do a allow an "or" operation for missing features
+		# However, the logic here is to mark any frame where any of the features were missing as no prediction
+		final_calls[np.any(classification_vectors == -1, axis=0)] = -1
 
-		bout_data = Bouts.from_value_vector(classification_vectors)
+		bout_data = Bouts.from_value_vector(final_calls)
 		bout_data.filter_by_settings(feature_settings)
 
 		bout_df = pd.DataFrame({
@@ -1018,12 +1026,13 @@ class JabsProject:
 		return cls(experiments)
 
 	@classmethod
-	def from_feature_folder(cls, project_folder, feature_settings: FeatureSettings):
+	def from_feature_folder(cls, project_folder: Path, feature_settings: FeatureSettings, feature_folder: Path = Path('.')):
 		"""Constructor based on a feature heuristic.
 
 		Args:
 			project_folder: Project folder with cached feature data.
 			feature_settings: feature settings for constructing events
+			feature_folder: optional folder where features are located
 
 		Returns:
 			JabsProject object with experimental results for feature based classification
@@ -1035,7 +1044,7 @@ class JabsProject:
 
 		experiments = []
 		for cur_pose in discovered_pose_files:
-			new_experiment = Experiment.from_features(cur_pose, feature_settings)
+			new_experiment = Experiment.from_features(cur_pose, feature_settings, feature_folder)
 			experiments.add(new_experiment)
 
 		return cls(experiments)
@@ -1214,17 +1223,18 @@ class Experiment:
 		return cls.from_pose_files([pose_file], settings, pattern, folder, include_missing)
 
 	@classmethod
-	def from_features(cls, pose_file: Path, feature_settings: FeatureSettings):
+	def from_features(cls, pose_file: Path, feature_settings: FeatureSettings, feature_folder: Path = Path('.')):
 		"""Constructs an experiment from feature-based classifications.
 
 		Args:
 			pose_file: pose file for this experiment
 			feature_settings: settings describing the feature-based classification
+			feature_folder: optional path folder location for the features
 
 		Returns:
 			Experiment containing the feature-based classification
 		"""
-		feature_files = cls.find_features(pose_file)
+		feature_files = cls.find_features(pose_file, feature_folder)
 
 		predictions = []
 		for feature_file in feature_files:
@@ -1246,11 +1256,17 @@ class Experiment:
 		Raises:
 			MissingFeatureException if no feature files found
 		"""
-		feature_folder = Path(feature_folder) / Path(pose).stem
-		if not os.path.exists(feature_folder):
-			raise MissingFeatureException(f'Feature folder not found for {Path(pose).stem} (searching {feature_folder}).')
+		# Test both a generic path and a path relative to the pose file
+		feature_folder_generic = Path(feature_folder) / Path(pose).stem
+		feature_folder_pose_rel = Path(pose).parent / Path(feature_folder) / Path(pose).stem
+		if os.path.exists(feature_folder_generic):
+			feature_folder = feature_folder_generic
+		elif os.path.exists(feature_folder_pose_rel):
+			feature_folder = feature_folder_pose_rel
+		else:
+			raise MissingFeatureException(f'Feature folder not found for {Path(pose).stem} (searching {feature_folder_generic} and {feature_folder_pose_rel}).')
 
-		found_feature_files = Path(feature_folder).glob(f'**/*{FEATURE_REGEX_STR}')
+		found_feature_files = list(Path(feature_folder).glob(f'**/*{FEATURE_REGEX_STR}'))
 		if len(found_feature_files) == 0:
 			raise MissingFeatureException(f'No features present in folder {feature_folder}.')
 		return found_feature_files
