@@ -1058,9 +1058,6 @@ class JabsProject:
 
 		Returns:
 			JabsProject object with experimental results for feature based classification
-
-		Todo:
-			Expose feature folder searching...
 		"""
 		discovered_pose_files = cls.find_pose_files(project_folder)
 
