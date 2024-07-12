@@ -10,8 +10,10 @@ from pathlib import Path
 from datetime import datetime
 from typing import List
 
+from jabs_utils.identity import VideoTracklet, Fragment
+
 BEHAVIOR_CLASSIFY_VERSION = 1
-POSE_REGEX_STR = '_pose_est_v[2-6].h5'
+POSE_REGEX_STR = '_pose_est_v([2-6]).h5'
 PREDICTION_REGEX_STR = '_behavior.h5'
 FEATURE_REGEX_STR = 'features.h5'
 DATE_REGEX_STR = '[0-9]{4}-[0-9]{2}-[0-9]{2}'
@@ -252,7 +254,7 @@ class VideoMetadata:
 		self._original_file = Path(file)
 		self._folder = self._original_file.parent
 		file_str = self._original_file.name
-		self._video = re.sub(f'({POSE_REGEX_STR}|{PREDICTION_REGEX_STR}|\\.avi|\\.mp4)', '', file_str)
+		self._video = self.pose_to_video(file_str)
 		time_search = re.search(TIMESTAMP_REGEX_STR, self._video)
 		video_start_time = time_search.group() if time_search is not None else '1970-01-01_00-00-00'
 		self._time = datetime.strptime(video_start_time, TIMESTAMP_FMT)
@@ -289,6 +291,15 @@ class VideoMetadata:
 	def experiment(self):
 		"""Experiment prefix."""
 		return self._experiment
+
+	@staticmethod
+	def pose_to_video(pose_file):
+		"""Converted pose file to expected video file.
+
+		Args:
+			pose_file: pose file to convert
+		"""
+		return re.sub(f'({POSE_REGEX_STR}|{PREDICTION_REGEX_STR}|\\.avi|\\.mp4)', '', pose_file)
 
 	def __str__(self):
 		return f'Video: {self._video}, Experiment: {self._experiment}, Time: {self.time_str}, Date: {self._date_start}'
@@ -606,11 +617,16 @@ class BoutTable(Table):
 		"""
 		if 'longterm_idx' not in self.data.keys():
 			self.data['longterm_idx'] = self.data['animal_idx'] + 1
-		grouped_df = self.data.groupby(['exp_prefix', 'longterm_idx'])
+		grouped_df = self.data.groupby(['exp_prefix', 'longterm_idx', 'animal_idx'])
 		all_results = []
 		for cur_group, cur_data in grouped_df:
 			binned_results = self.bouts_to_bins(cur_data, bin_size_minutes)
-			binned_results['exp_prefix'], binned_results['longterm_idx'] = cur_group
+			# Missing data can be multiple animals, so instead fall back to animal idx
+			if cur_group[1] != -1:
+				binned_results['exp_prefix'], binned_results['longterm_idx'], _ = cur_group
+			else:
+				binned_results['exp_prefix'] = cur_group[0]
+				binned_results['longterm_idx'] = -cur_group[2] - 1
 			all_results.append(binned_results)
 		all_results = pd.concat(all_results)
 
@@ -964,6 +980,15 @@ class Prediction(BoutTable):
 		bout_dfs = pd.concat(bout_dfs)
 		return bout_dfs
 
+	def add_id_field(self, ids: dict, unassigned: int = -1):
+		"""Adds longterm identity data to the object.
+
+		Args:
+			ids: dictionary of identity data to add. Dict should be a translation table of per-video id -> longterm id
+			unassigned: if an identity is not present in the dict, it is assigned this longterm id
+		"""
+		self._data['longterm_idx'] = [ids.get(x, unassigned) for x in self._data['animal_idx'].values]
+
 
 class JABSAnnotation(BoutTable):
 	"""A ground truth object that defines how to interact with JABS-behavior-classifier annotations."""
@@ -1102,7 +1127,8 @@ class JabsProject:
 		Returns:
 			List of pose files discovered in the folder
 		"""
-		return Path(path).glob(f'**/*{POSE_REGEX_STR}')
+		pose_regex_no_group = POSE_REGEX_STR.replace('(', '').replace(')', '')
+		return Path(path).glob(f'**/*{pose_regex_no_group}')
 
 	@staticmethod
 	def find_behaviors(path: Path):
@@ -1148,33 +1174,32 @@ class Experiment:
 		"""
 		self._pose_files = poses
 		self._predictions = predictions
+		self._id_dict = {}
 
 		# If this is more than 1 video we need to do extra steps
 		if len(poses) > 1:
-			# TODO:
-			# Handle identity
-			# Handle time sorting
-			pass
+			self._link_identities()
+			self._sort_predictions()
 
 	@classmethod
-	def from_prediction_files(cls, poses: List[Path], predictions: List[Path], settings: ClassifierSettings):
+	def from_prediction_files(cls, pose_files: List[Path], prediction_files: List[Path], settings: ClassifierSettings):
 		"""Initializes an experiment object.
 
 		Args:
-			poses: list of pose files
-			predictions: list of prediction files. Add None values to this list to include pose files without predictions.
+			pose_files: list of pose files
+			prediction_files: list of prediction files. Add None values to this list to include pose files without predictions.
 			settings: settings associated with a given behavior
 
 		Raises:
 			ValueError if length of arguments does not match
 		"""
-		if len(poses) != len(predictions):
-			raise ValueError(f'Poses {len(poses)} did not match predictions {len(predictions)}.')
+		if len(pose_files) != len(prediction_files):
+			raise ValueError(f'Poses {len(pose_files)} did not match predictions {len(prediction_files)}.')
 
-		predictions = []
-		for pose_file, pred_file in zip(poses, predictions):
+		prediction_objs = []
+		for pose_file, pred_file in zip(pose_files, prediction_files):
 			if pred_file is not None and Path(pred_file).exists():
-				predictions.append(Prediction.from_prediction_file(pred_file, settings))
+				prediction_objs.append(Prediction.from_prediction_file(pred_file, settings))
 			else:
 				with h5py.File(str(pose_file), 'r') as in_f:
 					keypoint_shape = in_f['poseest/points'].shape
@@ -1185,9 +1210,9 @@ class Experiment:
 				else:
 					num_animals = 1
 
-				predictions.append(Prediction.from_no_prediction(settings, num_frames=num_frames, num_animals=num_animals))
+				prediction_objs.append(Prediction.from_no_prediction(settings, num_frames=num_frames, num_animals=num_animals))
 
-		return cls(poses, predictions)
+		return cls(pose_files, prediction_objs)
 
 	@classmethod
 	def from_pose_files(cls, pose_files: List[Path], settings: ClassifierSettings, pattern: str = PREDICTION_REGEX_STR, folder: Path = '.', include_missing: bool = True):
@@ -1334,6 +1359,64 @@ class Experiment:
 
 		return behavior_list
 
+	@staticmethod
+	def get_pose_version(pose_file: Path):
+		"""Helper function to obtain the pose version of the pose file.
+
+		Args:
+			pose_file: pose file to obtain the pose version
+
+		Returns:
+			If the file contains a pose version attribute, the value of the attribute. Otherwise, it attempts to parse the version from the filename.
+
+		Raises:
+			ValueError if the version could not be determined from either method
+			FileNotFoundError if the file does not exist
+		"""
+		try:
+			with h5py.File(pose_file, 'r') as f:
+				pose_version = f['poseest'].attrs['version'][0]
+		except (KeyError, IndexError):
+			try:
+				pose_version = int(re.search(POSE_REGEX_STR, pose_file).groups()[0])
+			except AttributeError:
+				raise ValueError(f'Could not determine pose version of pose file {pose_file}')
+
+		return pose_version
+
+	@staticmethod
+	def read_pose_ids(pose_file: Path, embed_size_default: int = 16):
+		"""Helper function that reads identity data from a pose file.
+
+		Args:
+			pose_file: pose file to read identity data
+			embed_size_default: default size of embeddings to provide when missing
+
+		Returns:
+			tuple of (centers, model)
+			centers: np.ndarray of shape [num_mice, embedding_dim] containing embedding location of an individual
+			model: model key present for the identity
+		"""
+		pose_v = Experiment.get_pose_version(pose_file)
+		if pose_v == 2:
+			num_mice = 1
+			centers = np.zeros([num_mice, embed_size_default], dtype=np.float64)
+			model_used = 'None'
+		# No longterm IDs exist, provide a default value of the correct shape
+		elif pose_v == 3:
+			with h5py.File(pose_file, 'r') as f:
+				num_mice = np.max(f['poseest/instance_count'])
+				centers = np.zeros([num_mice, embed_size_default], dtype=np.float64)
+				model_used = 'None'
+		elif pose_v >= 4:
+			with h5py.File(pose_file, 'r') as f:
+				centers = f['poseest/instance_id_center'][:]
+				if 'network' in f['poseest/identity_embeds'].attrs:
+					model_used = f['poseest/identity_embeds'].attrs['network']
+				else:
+					model_used = 'Undefined'
+		return centers, model_used
+
 	def get_behavior_bouts(self):
 		"""Generates behavior bout data for a given behavior.
 
@@ -1345,6 +1428,78 @@ class Experiment:
 		"""
 		all_bout_data = Prediction.combine_data(self._predictions)
 		return all_bout_data
+
+	def _link_identities(self, check_model: bool = False):
+		"""Modifies self._pose_id_dict and self._predictions to add longterm identity between video data.
+
+		Args:
+			check_model: bool to check if the same identity model was used for predictions in this experiment
+
+		Notes:
+			self._id_dict contains the translation information in the form of a dict of dicts describing the identity mapping between files
+				First key indicates video file key
+				Second key indicates identity within file (unique to file)
+				Value indicates linked identity (constant across files)
+			'longterm_id' key is added and populated with data in self._predictions data
+		"""
+		# Read in all the center data
+		fragments = []
+		identified_model = None
+		for cur_pose_file in self._pose_files:
+			cur_centers, cur_model = self.read_pose_ids(cur_pose_file)
+			# Check that new data conforms to the name of the previous model
+			if identified_model is None:
+				identified_model = cur_model
+			elif check_model:
+				assert identified_model == cur_model
+			tracklets = [VideoTracklet(i, cur_centers[i, :].reshape([1, -1])) for i in range(len(cur_centers))]
+			new_fragment = Fragment(tracklets)
+			fragments.append(new_fragment)
+		# Sort by best fragment and start matching from there
+		fragment_qualities = np.asarray([x.separation for x in fragments])
+		fragment_lengths = np.asarray([len(x._tracklets) for x in fragments])
+		# Adjust qualities such that fragments of the correct number are matched first...
+		# TODO:
+		# Is the median the correct operation here, or should we allow the user to choose?
+		fragment_qualities[fragment_lengths != np.ceil(np.median(fragment_lengths))] -= 1
+		sorting_order = np.argsort(-fragment_qualities)
+		# Seed first value
+		best_fragment_idx = np.where(sorting_order == 0)
+		cur_fragment = fragments[best_fragment_idx[0][0]]
+		video_key = Path(VideoMetadata.pose_to_video(self._pose_files[best_fragment_idx[0][0]])).stem
+		self._id_dict = {video_key: {x: x for x in range(len(cur_fragment._tracklets))}}
+		for match_count in np.arange(len(fragment_qualities) - 1) + 1:
+			next_fragment_index = np.where(sorting_order == match_count)
+			next_fragment = fragments[next_fragment_index[0][0]]
+			hungarian_match = Fragment.hungarian_match_ids(cur_fragment, next_fragment)
+			video_key = Path(VideoMetadata.pose_to_video(self._pose_files[next_fragment_index[0][0]])).stem
+			self._id_dict[video_key] = {new_id: old_id for old_id, new_id in zip(*hungarian_match)}
+			# Warning. We add tracklets in order based on current fragment
+			# This will preserve tracklets in cur_fragment, but discard unmatched in next_fragment.
+			new_tracklets = []
+			for i in range(len(cur_fragment._tracklets)):
+				if i in hungarian_match[0]:
+					match_idx = hungarian_match[0] == i
+					new_tracklets.append(VideoTracklet.from_tracklets([cur_fragment._tracklets[hungarian_match[0][match_idx][0]], next_fragment._tracklets[hungarian_match[1][match_idx][0]]]))
+				else:
+					new_tracklets.append(cur_fragment._tracklets[i])
+			cur_fragment = Fragment(new_tracklets)
+
+		for cur_prediction in self._predictions:
+			id_assignments = self._id_dict.get(cur_prediction.data.iloc[0]['video_name'], {})
+			cur_prediction.add_id_field(id_assignments)
+
+	def _sort_predictions(self):
+		"""Sorts the predictions by their time components.
+
+		Todo:
+			Here is probably a good place to check for missing data, rather than relying on other checks.
+		"""
+		prediction_times = np.asarray([x.data.iloc[0]['time'] for x in self._predictions])
+		# Since the time format is Y-M-D_H-M-S, it's as simple as argsort!
+		sort_order = np.argsort(prediction_times)
+		self._pose_files = np.asarray(self._pose_files)[sort_order].tolist()
+		self._predictions = np.asarray(self._predictions)[sort_order].tolist()
 
 
 class JABSFeature:
