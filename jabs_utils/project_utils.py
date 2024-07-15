@@ -299,7 +299,7 @@ class VideoMetadata:
 		Args:
 			pose_file: pose file to convert
 		"""
-		return re.sub(f'({POSE_REGEX_STR}|{PREDICTION_REGEX_STR}|\\.avi|\\.mp4)', '', pose_file)
+		return re.sub(f'({POSE_REGEX_STR}|{PREDICTION_REGEX_STR}|\\.avi|\\.mp4)', '', str(pose_file))
 
 	def __str__(self):
 		return f'Video: {self._video}, Experiment: {self._experiment}, Time: {self.time_str}, Date: {self._date_start}'
@@ -606,6 +606,58 @@ class BoutTable(Table):
 		self._optional_columns = ['longterm_idx', 'exp_prefix', 'time', 'distance', 'closest_id', 'closest_lixit', 'closest_corner']
 		self._check_fields()
 
+	@classmethod
+	def from_jabs_annotation_file(cls, source_file: Path, behavior: str):
+		"""Constructs a bout table from a JABS annotation file.
+
+		Args:
+			source_file: JABS annotation json file
+			behavior: name of behavior
+		"""
+		settings = ClassifierSettings(behavior, 0, 0, 0)
+		with open(source_file, 'r') as f:
+			data = json.load(f)
+
+		vid_name = data['file']
+		df_list = []
+		for animal_idx, labels in data['labels'].items():
+			for cur_behavior, label_data in labels.items():
+				if cur_behavior == behavior:
+					new_events = []
+					for cur_event in label_data:
+						new_df = pd.DataFrame({
+							'animal_idx': [int(animal_idx)],
+							'start': [cur_event['start']],
+							'duration': [cur_event['end'] - cur_event['start'] + 1],
+							'is_behavior': [cur_event['present']],
+						})
+						new_events.append(new_df)
+					if len(new_events) > 0:
+						df_list.append(pd.concat(new_events))
+
+		if len(df_list) > 0:
+			df_list = pd.concat(df_list)
+			df_list['video_name'] = Path(vid_name).stem
+		else:
+			df_list = pd.DataFrame({'animal_idx': [], 'start': [], 'duration': [], 'is_behavior': [], 'video_name': []})
+
+		return cls(settings, df_list)
+
+	@classmethod
+	def from_jabs_annotation_folder(cls, folder: Path, behavior: str):
+		"""Constructs a bout table from a collection of JABS annotation files in a folder.
+
+		Args:
+			folder: folder containing JABS json annotations
+			behavior: name of behavior
+		"""
+		all_annotations = []
+		for cur_annotation in Path(folder).glob('**/*.json'):
+			read_annotation = cls.from_jabs_annotation_file(cur_annotation, behavior)
+			all_annotations.append(read_annotation)
+
+		return cls.combine_data(all_annotations)
+
 	def to_summary_table(self, bin_size_minutes: int = 60):
 		"""Converts bout information into binned summary table.
 
@@ -893,7 +945,7 @@ class Prediction(BoutTable):
 		Returns:
 			Prediction object with only 1 bout of "no prediction" for each animal
 		"""
-		bout_df = cls.generate_default_bouts(num_frames, num_animals)
+		bout_df = cls.generate_default_bouts(num_animals, num_frames)
 		video_metadata = VideoMetadata(file)
 
 		return cls(settings, bout_df, video_metadata)
@@ -988,47 +1040,6 @@ class Prediction(BoutTable):
 			unassigned: if an identity is not present in the dict, it is assigned this longterm id
 		"""
 		self._data['longterm_idx'] = [ids.get(x, unassigned) for x in self._data['animal_idx'].values]
-
-
-class JABSAnnotation(BoutTable):
-	"""A ground truth object that defines how to interact with JABS-behavior-classifier annotations."""
-	def __init__(self, source_file: Path, settings: ClassifierSettings):
-		"""Initializes an annotation object.
-
-		Args:
-			source_file: JABS annotation json file
-			settings: settings used for these annotations
-		"""
-		super().__init__(settings, pd.DataFrame())
-		self._source_file = source_file
-		with open(source_file, 'r') as f:
-			data = json.load(f)
-
-		vid_name = data['file']
-		df_list = []
-		for animal_idx, labels in data['labels']:
-			for cur_behavior, label_data in labels.items():
-				if cur_behavior == settings.behavior:
-					new_events = []
-					for cur_event in label_data:
-						new_df = pd.DataFrame({
-							'animal_idx': [animal_idx],
-							'behavior': [cur_behavior],
-							'start': [cur_event['start']],
-							'duration': [cur_event['end'] - cur_event['start'] + 1],
-							'is_behavior': [cur_event['present']]
-						})
-						new_events.append(new_df)
-					if len(new_events) > 0:
-						df_list.append(pd.concat(new_events))
-
-		if len(df_list) > 0:
-			df_list = pd.concat(df_list)
-			df_list['video'] = Path(vid_name).stem
-		else:
-			df_list = pd.DataFrame({'animal_idx': [], 'behavior': [], 'start': [], 'duration': [], 'is_behavior': [], 'video': []})
-
-		self._data = df_list
 
 
 class JabsProject:
@@ -1210,7 +1221,7 @@ class Experiment:
 				else:
 					num_animals = 1
 
-				prediction_objs.append(Prediction.from_no_prediction(settings, num_frames=num_frames, num_animals=num_animals))
+				prediction_objs.append(Prediction.from_no_prediction(settings, num_frames=num_frames, num_animals=num_animals, file=pose_file))
 
 		return cls(pose_files, prediction_objs)
 
