@@ -8,11 +8,8 @@ import numpy as np
 import argparse
 import warnings
 
-import jabs_utils.read_utils as rutils
-import jabs_utils.project_utils as putils
-import analysis_utils.gt_utils as gutils
-from jabs_utils.bout_utils import rle, filter_data
-# from compare_gt import generate_iou_scan, read_annotation_dataframe
+from jabs_utils.project_utils import BoutTable, JabsProject, ClassifierSettings, Bouts
+
 
 def evaluate_ground_truth(args):
     """Main function for evaluating ground truth annotations against classifier predictions.
@@ -20,10 +17,19 @@ def evaluate_ground_truth(args):
     Args:
         args: Namespace of arguments. See `main` for arguments and descriptions
     """
-    if hasattr(args, 'prediction_folder'):
-        all_annotations = read_annotation_dataframe(args.ground_truth_folder, args.prediction_folder, args.interpolation_size, args.trim_time)
-    else:
-        raise NotImplementedError('Classifying using a classifier not currently implemented. Please use --prediction_folder instead.')
+    gt_df = BoutTable.from_jabs_annotation_folder(args.ground_truth_folder, args.behavior)._data
+    # Settings to read in the unfiltered data
+    dummy_settings = ClassifierSettings(args.behavior, 0, 0, 0)
+    pred_df = JabsProject.from_prediction_folder(args.prediction_folder, dummy_settings).get_bouts()._data
+
+    gt_df['is_gt'] = True
+    pred_df['is_gt'] = False
+    all_annotations = pd.concat([gt_df, pred_df])
+    # We only want the positive examples
+    all_annotations = all_annotations[all_annotations['is_behavior'] == 1]
+    # TODO: Trim time?
+    if args.trim_time is not None:
+        warnings.warn('Time trimming is not currently supported, ignoring.')
 
     performance_df = generate_iou_scan(all_annotations, args.stitch_scan, args.filter_scan, args.iou_thresholds, args.filter_ground_truth)
     melted_df = pd.melt(performance_df, id_vars=["behavior", "threshold", "stitch", "filter"])
@@ -41,7 +47,7 @@ def evaluate_ground_truth(args):
     #     + p9.theme_bw()
     # )
 
-    middle_threshold = np.sort(args.iou_thresholds)[int(np.floor(len(args.iou_thresholds)/2))]
+    middle_threshold = np.sort(args.iou_thresholds)[int(np.floor(len(args.iou_thresholds) / 2))]
 
     (
         p9.ggplot(performance_df[performance_df['threshold'] == middle_threshold])
@@ -66,56 +72,11 @@ def evaluate_ground_truth(args):
     ).save(args.bout_output, height=6, width=12, dpi=300)
 
 
-def read_annotation_dataframe(ground_truth_folder, prediction_folder, interpolation_size, trim_time) -> pd.DataFrame:
-    """Read in the predictions and ground truth annotations.
-
-    Args:
-        ground_truth_folder: folder containing a JABS project with annotations
-        prediction_folder: folder with predictions from classifiers
-        interpolation_size: number of frames to allow interpolation on prediction data
-        trim_time: number of frames to trim the prediction data to (if GT was not annotated for the full video length)
-
-    Returns:
-        Dataframe containing annotation and prediction data
-    """
-    gt_annotations = rutils.read_project_annotations(ground_truth_folder)
-
-    pred_behaviors = putils.get_behaviors_in_folder(prediction_folder)
-    pred_poses = putils.get_poses_in_folder(prediction_folder)
-    raw_predictions = []
-    for behavior in pred_behaviors:
-        for pose_file in pred_poses:
-            cur_video = putils.pose_to_video(pose_file)
-            prediction_df = rutils.parse_predictions(
-                putils.pose_to_prediction(pose_file, behavior),
-                interpolate_size=interpolation_size,
-                stitch_bouts=0,
-                filter_bouts=0,
-                trim_time=trim_time,
-            )
-            prediction_df['behavior'] = behavior
-            prediction_df['video'] = cur_video
-            raw_predictions.append(prediction_df)
-    raw_predictions = pd.concat(raw_predictions).reset_index(drop=True)
-
-    # Combine the df to make comparing animals a lot easier
-    gt_annotations["is_gt"] = True
-    raw_predictions["is_gt"] = False
-    all_annotations = pd.concat([gt_annotations, raw_predictions])
-    # Patch for some old projects where classifier name doesn't match gt name
-    # all_annotations["behavior"] = [re.sub("-", "_", x) for x in all_annotations["behavior"]]
-    all_annotations["mouse_idx"] = (
-        all_annotations["video"] + "_" + all_annotations["animal_idx"].astype(str)
-    )
-    all_annotations["mouse_idx"] = all_annotations["mouse_idx"].astype("category")
-
-    return all_annotations
-
 def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan, filter_ground_truth: bool = False) -> pd.DataFrame:
     """Scans stitch and filter values to produce a bout-level performance metrics at varying IoU values.
 
     Args:
-        all_annotations: pd.DataFrame returned from `read_annotation_dataframe`
+        all_annotations: BoutTable dataframe with an additional 'is_gt' column
         stitch_scan: list of potential stitching values to scan
         filter_scan: list of potential filter values to scan
         threshold_scan: list of potential iou thresholds to scan
@@ -132,27 +93,26 @@ def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan,
         if len(pr_df) == 0:
             warnings.warn(f'No predictions for {cur_animal} for behavior {cur_behavior}... skipping.')
             continue
-        pr_bout_start, pr_bout_durations, pr_bout_states = pr_df['start'].values, pr_df['duration'].values, pr_df['is_behavior'].values
-        # gt data only reads in 'behavior' data, so pad not behavior to the shape of predictions
+        pr_obj = Bouts(pr_df['start'], pr_df['duration'], pr_df['is_behavior'])
         gt_df = animal_df[animal_df['is_gt']]
-        gt_vector = np.zeros(pr_bout_start[-1] + pr_bout_durations[-1], dtype=pr_bout_states.dtype)
-        for _, row in gt_df.iterrows():
-            gt_vector[row['start']:row['start'] + row['duration']] = row['is_behavior']
-        gt_bout_start, gt_bout_durations, gt_bout_states = rle(gt_vector)
+        gt_obj = Bouts(gt_df['start'], gt_df['duration'], gt_df['is_behavior'])
+
+        full_duration = pr_obj.starts[-1] + pr_obj.durations[-1]
+        pr_obj.fill_to_size(full_duration, 0)
+        gt_obj.fill_to_size(full_duration, 0)
+
         # ugly method to scan over each combination of stitch and filter in one line
         for cur_stitch, cur_filter in zip(*map(np.ndarray.flatten, np.meshgrid(stitch_scan, filter_scan))):
+            cur_filter_settings = ClassifierSettings('', interpolate=0, stitch=cur_stitch, min_bout=cur_filter)
+            cur_pr = pr_obj.copy()
+            cur_gt = gt_obj.copy()
             if filter_ground_truth:
-                cur_starts, cur_durations, cur_values = filter_data(gt_bout_start, gt_bout_durations, gt_bout_states, max_gap_size=cur_stitch, values_to_remove=[0])
-                cur_starts, cur_durations, cur_values = filter_data(cur_starts, cur_durations, cur_values, max_gap_size=cur_filter, values_to_remove=[1])
-                gt_bouts = np.stack([cur_starts[cur_values == 1], cur_durations[cur_values == 1]])
-            else:
-                gt_bouts = np.stack([gt_bout_start[gt_bout_states == 1], gt_bout_durations[gt_bout_states == 1]])
+                cur_gt.filter_by_settings(cur_filter_settings)
             # Always apply filters to predictions
-            cur_starts, cur_durations, cur_values = filter_data(pr_bout_start, pr_bout_durations, pr_bout_states, max_gap_size=cur_stitch, values_to_remove=[0, -1])
-            cur_starts, cur_durations, cur_values = filter_data(cur_starts, cur_durations, cur_values, max_gap_size=cur_filter, values_to_remove=[1, -1])
-            pr_bouts = np.stack([cur_starts[cur_values == 1], cur_durations[cur_values == 1]])
+            cur_pr.filter_by_settings(cur_filter_settings)
+
             # Add iou metrics to the list
-            int_mat, u_mat, iou_mat = gutils.get_iou_mat(gt_bouts.T, pr_bouts.T)
+            int_mat, u_mat, iou_mat = cur_gt.compare_to(cur_pr)
             for cur_threshold in threshold_scan:
                 new_performance = {
                     'behavior': [cur_behavior],
@@ -161,7 +121,7 @@ def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan,
                     'filter': [cur_filter],
                     'threshold': [cur_threshold],
                 }
-                metrics = gutils.calc_temporal_iou_metrics(iou_mat, cur_threshold)
+                metrics = Bouts.calculate_iou_metrics(iou_mat, cur_threshold)
                 for key, val in metrics.items():
                     new_performance[key] = [val]
                 performance_df.append(pd.DataFrame(new_performance))
@@ -185,9 +145,7 @@ def main(argv):
     """
     parser = argparse.ArgumentParser(description='Evaluates classifier performance on densely annotated ground truth data')
     parser.add_argument('--ground_truth_folder', help='Path to the JABS project which contains densely annotated ground truth data.', required=True)
-    g1 = parser.add_mutually_exclusive_group()
-    g1.add_argument('--prediction_folder', help='Path to the folder where behavior predictions were made.')
-    g1.add_argument('--exported_classifier', help='Exported JABS classifier to generate predictions.')
+    parser.add_argument('--prediction_folder', help='Path to the folder where behavior predictions were made.', required=True)
     parser.add_argument('--stitch_scan', help='List of stitching (time gaps in frames to merge bouts together) values to test.', type=float, nargs='+', default=np.arange(5, 46, 5).tolist())
     parser.add_argument('--filter_scan', help='List of filter (minimum duration in frames to consider real) values to test.', type=float, nargs='+', default=np.arange(5, 46, 5).tolist())
     parser.add_argument('--iou_thresholds', help='List of intersection over union thresholds to scan.', type=float, nargs='+', default=np.arange(0.05, 1.01, 0.05))

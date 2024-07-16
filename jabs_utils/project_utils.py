@@ -8,7 +8,8 @@ import os
 import enum
 from pathlib import Path
 from datetime import datetime
-from typing import List
+from typing import List, Union
+from copy import deepcopy
 
 from jabs_utils.identity import VideoTracklet, Fragment
 
@@ -320,9 +321,9 @@ class Bouts:
 		"""
 		assert len(starts) == len(durations)
 		assert len(starts) == len(values)
-		self._starts = starts
-		self._durations = durations
-		self._values = values
+		self._starts = np.asarray(starts)
+		self._durations = np.asarray(durations)
+		self._values = np.asarray(values)
 
 	@property
 	def starts(self):
@@ -372,6 +373,99 @@ class Bouts:
 			z = np.diff(np.append(-1, i))
 			p = np.cumsum(np.append(0, z))[:-1]
 			return (p, z, ia[i])
+
+	@staticmethod
+	def calculate_intersection(e1_start: Union[int, np.ndarray], e1_duration: Union[int, np.ndarray], e2_start: Union[int, np.ndarray], e2_duration: Union[int, np.ndarray]):
+		"""Calculates the intersection of events.
+
+		Args:
+			e1_start: start of event(s) for group 1
+			e1_duration: duration of event(s) for group 1
+			e2_start: start of event(s) for group 2
+			e2_duration: duration of event(s) for group 2
+
+		Returns:
+			np.ndarray of shape [e1, e2] describing the intersection of pairwise events
+		"""
+		e1s_arr = np.asarray(e1_start).flatten()
+		e1d_arr = np.asarray(e1_duration).flatten()
+		e2s_arr = np.asarray(e2_start).flatten()
+		e2d_arr = np.asarray(e2_duration).flatten()
+		# Detect the larger of the 2 start times
+		max_start_time = np.max([np.repeat(e1s_arr, len(e2s_arr)).reshape([len(e2s_arr), -1]), np.repeat([e2s_arr], len(e1s_arr), axis=0)], axis=0)
+		# Detect the smaller of the 2 end times
+		e1_end = e1s_arr + e1d_arr
+		e2_end = e2s_arr + e2d_arr
+		min_end_time = np.min([np.repeat(e1_end, len(e2s_arr)).reshape([len(e2s_arr), -1]), np.repeat([e2_end], len(e1s_arr), axis=0)], axis=0)
+
+		return_vals = min_end_time - max_start_time
+		# Detect if the 2 bouts intersected at all
+		return_vals[max_start_time >= min_end_time] = 0
+		return return_vals
+
+	@staticmethod
+	def calculate_union(e1_start: Union[int], e1_duration: Union[int], e2_start: Union[int], e2_duration: Union[int]):
+		"""Calculates the intersection of events.
+
+		Args:
+			e1_start: start of event(s) for group 1
+			e1_duration: duration of event(s) for group 1
+			e2_start: start of event(s) for group 2
+			e2_duration: duration of event(s) for group 2
+
+		Returns:
+			np.ndarray of shape [e1, e2] describing the union of pairwise events
+		"""
+		e1s_arr = np.asarray(e1_start).flatten()
+		e1d_arr = np.asarray(e1_duration).flatten()
+		e2s_arr = np.asarray(e2_start).flatten()
+		e2d_arr = np.asarray(e2_duration).flatten()
+
+		min_start_time = np.min([np.repeat(e1s_arr, len(e2s_arr)).reshape([len(e2s_arr), -1]), np.repeat([e2s_arr], len(e1s_arr), axis=0)], axis=0)
+
+		e1_end = e1s_arr + e1d_arr
+		e2_end = e2s_arr + e2d_arr
+
+		max_end_time = np.max([np.repeat(e1_end, len(e2s_arr)).reshape([len(e2s_arr), -1]), np.repeat([e2_end], len(e1s_arr), axis=0)], axis=0)
+		
+		vals_if_overlap = max_end_time - min_start_time
+		vals_no_overlap = np.sum([np.repeat(e1d_arr, len(e2s_arr)).reshape([len(e2s_arr), -1]), np.repeat([e2d_arr], len(e1s_arr), axis=0)], axis=0)
+
+		return_vals = np.min([vals_if_overlap, vals_no_overlap], axis=0)
+		return return_vals
+
+	@staticmethod
+	def calculate_iou_metrics(iou_matrix: np.ndarray, threshold: float):
+		"""Calculates the intersection over union metrics based on an iou matrix produced by `compare_to`.
+
+		Args:
+			iou_matrix: matrix of intersections over unions for compared events. The first dimension should be ground truth
+			threshold: threshold value for calculating metrics
+
+		Returns:
+			dict of performance metrics
+				tp: true positive event count
+				fn: false negative event count
+				fp: false positive event count
+				pr: precition score
+				re: recall score
+
+		Examples:
+			_, _, ious = ground_truth_bouts.compare_to(prediction_bouts)
+			Bouts.calculate_iou_metrics(ious, 0.9)
+		"""
+		if len(iou_matrix) == 0:
+			return {'tp': 0, 'fn': 0, 'fp': 0, 'pr': 0, 're': 0, 'f1': 0}
+		tp_counts = 0
+		fn_counts = 0
+		fp_counts = 0
+		tp_counts += np.sum(np.any(iou_matrix > threshold, axis=1))
+		fn_counts += np.sum(np.all(iou_matrix < threshold, axis=1))
+		fp_counts += np.sum(np.all(iou_matrix < threshold, axis=0))
+		precision = tp_counts / (tp_counts + fp_counts)
+		recall = tp_counts / (tp_counts + fn_counts)
+		f1 = 2 * (precision * recall) / (precision + recall)
+		return {'tp': tp_counts, 'fn': fn_counts, 'fp': fp_counts, 'pr': precision, 're': recall, 'f1': f1}
 
 	def shift_start(self, offset: int):
 		"""Shifts the starts for all bouts.
@@ -458,6 +552,92 @@ class Bouts:
 			self.delete_short_events(settings.stitch, [0])
 		if settings.min_bout > 0:
 			self.delete_short_events(settings.min_bout, [1])
+
+	def fill_to_size(self, max_frames: int, fill_state: int = -1):
+		"""Fills and crops event data to a specific size.
+
+		Args:
+			max_frames: maximum frame number (to either pad or crop)
+			fill_state: state to fill in padded events
+		"""
+		vector_data = self.to_vector(max_frames, fill_state, False)
+		vector_data = vector_data[:max_frames]
+		new_starts, new_durations, new_values = self.rle(vector_data)
+		self._starts = np.asarray(new_starts)
+		self._durations = np.asarray(new_durations)
+		self._values = np.asarray(new_values)
+
+	def to_vector(self, min_frames: int = -1, fill_state: int = -1, shift_start: bool = True):
+		"""Converts this object back to a vector.
+
+		Args:
+			min_frames: minimum number of frames to produce. return vector will be of length min_frames or when the last bout ends, whichever is longer.
+			fill_state: state to fill any missing bout info with
+			shift_start: bool indicating if the first event should be shifted to index 0
+
+		Returns:
+			np.ndarray of the state vector.
+		"""
+		if shift_start:
+			adjusted_starts = self._starts - np.min(self._starts)
+		else:
+			adjusted_starts = self._starts
+		ends = adjusted_starts + self._durations
+		total_length = np.max(ends)
+		total_length = np.max([total_length, min_frames])
+
+		vector = np.full(total_length, fill_state)
+		for start, end, state in zip(adjusted_starts, ends, self._values):
+			vector[start:end] = state
+
+		return vector
+
+	def compare_to(self, other: Bouts, state: int = 1):
+		"""Compares these events to another list of events.
+
+		Args:
+			other: other bout object
+			state: state to compare
+
+		Returns:
+			tuple of (intersections, unions, intersections_over_unions)
+			intersections: np.ndarray of shape [self, other] describing the intersection size of pairwise events
+			unions: np.ndarray of shape [self, other] describing the union of pairwise events
+			intersections_over_unions: np.ndarray of shape [self, other] describing the IoU of events
+		"""
+		o1_events = self.values == state
+		o2_events = other.values == state
+
+		o1_starts = self.starts[o1_events]
+		o1_durations = self.durations[o1_events]
+		o2_starts = other.starts[o2_events]
+		o2_durations = other.durations[o2_events]
+
+		intersection_mat = Bouts.calculate_intersection(o1_starts, o1_durations, o2_starts, o2_durations)
+		union_mat = Bouts.calculate_union(o1_starts, o1_durations, o2_starts, o2_durations)
+		iou_mat = np.divide(intersection_mat.astype(np.float64), union_mat.astype(np.float64), out=np.zeros_like(intersection_mat), where=union_mat != 0)
+
+		return intersection_mat, union_mat, iou_mat
+
+	def _sort(self):
+		"""Sorts the internal bouts."""
+		start_order = np.argsort(self._starts)
+		if np.any(start_order != np.arange(len(start_order))):
+			self._starts = self._starts[start_order]
+			self._durations = self._durations[start_order]
+			self._values = self._values[start_order]
+
+	def _check_full(self):
+		"""Checks if the bouts object contains a value for every frame."""
+		self._sort()
+		ends = self._starts + self._durations
+		if np.all(self._starts[1:] == ends[:-1]):
+			return True
+		return False
+
+	def copy(self):
+		"""Returns a deep copy."""
+		return deepcopy(self)
 
 
 class Table:
@@ -683,21 +863,6 @@ class BoutTable(Table):
 		all_results = pd.concat(all_results)
 
 		return BinTable(self._settings, all_results)
-
-	def compare_to(self, other: BoutTable, state: int = 1):
-		"""Compares these bouts with other bouts.
-
-		Args:
-			other: the other bout table to compare overlaps
-			state: state to detect overlaps
-
-		Returns:
-			tuple of (intersect, union, iou)
-			intersect: intersection of bouts
-			union: union of bouts
-			iou: intersection over union
-		"""
-		raise NotImplementedError()
 
 	@staticmethod
 	def bouts_to_bins(event_df: pd.DataFrame, bin_size_minutes: int = 60, fps: int = 30):
