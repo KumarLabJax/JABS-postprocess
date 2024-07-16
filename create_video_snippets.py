@@ -3,8 +3,7 @@ import h5py
 import argparse
 import sys
 import os
-from analysis_utils.clip_utils import write_video_clip, write_pose_clip
-from jabs_utils.read_utils import read_pose_file
+from analysis_utils.clip_utils import write_video_clip, write_pose_clip, read_pose_file
 from typing import Union
 
 
@@ -85,7 +84,6 @@ def main(argv):
 	write_video_clip(args.input_video, args.output_video, range(start_frame, end_frame), behavior_data, pose_for_video)
 	if args.out_pose and args.pose_file is not None:
 		write_pose_clip(args.pose_file, args.out_pose, range(start_frame, end_frame))
-
 
 
 if __name__ == '__main__':
