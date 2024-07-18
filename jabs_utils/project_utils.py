@@ -392,11 +392,11 @@ class Bouts:
 		e2s_arr = np.asarray(e2_start).flatten()
 		e2d_arr = np.asarray(e2_duration).flatten()
 		# Detect the larger of the 2 start times
-		max_start_time = np.max([np.repeat(e1s_arr, len(e2s_arr)).reshape([len(e2s_arr), -1]), np.repeat([e2s_arr], len(e1s_arr), axis=0)], axis=0)
+		max_start_time = np.max([np.repeat(e1s_arr, len(e2s_arr)).reshape([-1, len(e2s_arr)]), np.repeat([e2s_arr], len(e1s_arr), axis=0)], axis=0)
 		# Detect the smaller of the 2 end times
 		e1_end = e1s_arr + e1d_arr
 		e2_end = e2s_arr + e2d_arr
-		min_end_time = np.min([np.repeat(e1_end, len(e2s_arr)).reshape([len(e2s_arr), -1]), np.repeat([e2_end], len(e1s_arr), axis=0)], axis=0)
+		min_end_time = np.min([np.repeat(e1_end, len(e2s_arr)).reshape([-1, len(e2s_arr)]), np.repeat([e2_end], len(e1s_arr), axis=0)], axis=0)
 
 		return_vals = min_end_time - max_start_time
 		# Detect if the 2 bouts intersected at all
@@ -421,15 +421,15 @@ class Bouts:
 		e2s_arr = np.asarray(e2_start).flatten()
 		e2d_arr = np.asarray(e2_duration).flatten()
 
-		min_start_time = np.min([np.repeat(e1s_arr, len(e2s_arr)).reshape([len(e2s_arr), -1]), np.repeat([e2s_arr], len(e1s_arr), axis=0)], axis=0)
+		min_start_time = np.min([np.repeat(e1s_arr, len(e2s_arr)).reshape([-1, len(e2s_arr)]), np.repeat([e2s_arr], len(e1s_arr), axis=0)], axis=0)
 
 		e1_end = e1s_arr + e1d_arr
 		e2_end = e2s_arr + e2d_arr
 
-		max_end_time = np.max([np.repeat(e1_end, len(e2s_arr)).reshape([len(e2s_arr), -1]), np.repeat([e2_end], len(e1s_arr), axis=0)], axis=0)
+		max_end_time = np.max([np.repeat(e1_end, len(e2s_arr)).reshape([-1, len(e2s_arr)]), np.repeat([e2_end], len(e1s_arr), axis=0)], axis=0)
 		
 		vals_if_overlap = max_end_time - min_start_time
-		vals_no_overlap = np.sum([np.repeat(e1d_arr, len(e2s_arr)).reshape([len(e2s_arr), -1]), np.repeat([e2d_arr], len(e1s_arr), axis=0)], axis=0)
+		vals_no_overlap = np.sum([np.repeat(e1d_arr, len(e2s_arr)).reshape([-1, len(e2s_arr)]), np.repeat([e2d_arr], len(e1s_arr), axis=0)], axis=0)
 
 		return_vals = np.min([vals_if_overlap, vals_no_overlap], axis=0)
 		return return_vals
@@ -615,7 +615,7 @@ class Bouts:
 
 		intersection_mat = Bouts.calculate_intersection(o1_starts, o1_durations, o2_starts, o2_durations)
 		union_mat = Bouts.calculate_union(o1_starts, o1_durations, o2_starts, o2_durations)
-		iou_mat = np.divide(intersection_mat.astype(np.float64), union_mat.astype(np.float64), out=np.zeros_like(intersection_mat), where=union_mat != 0)
+		iou_mat = np.divide(intersection_mat.astype(np.float64), union_mat.astype(np.float64), where=union_mat != 0)
 
 		return intersection_mat, union_mat, iou_mat
 
