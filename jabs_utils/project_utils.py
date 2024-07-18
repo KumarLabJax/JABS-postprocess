@@ -184,6 +184,33 @@ class FeatureRule:
 		return self.__str__()
 
 
+class FeatureInEvent:
+	"""A structured definition of how a feature can be summarized within an event."""
+	def __init__(self, feature_name: str, feature_key: str, summary_op: callable):
+		"""Initializes an instance.
+
+		Args:
+			feature_name: name associated with the feature
+			feature_key: full path to key in feature file
+			summary_op: summary operation of the feature on a per-bout basis
+		"""
+		self._feature_name = feature_name
+		self._feature_key = feature_key
+		self._summary_op = summary_op
+
+	@property
+	def feature_name(self):
+		return self._feature_name
+
+	@property
+	def feature_key(self):
+		return self._feature_key
+	
+	@property
+	def summary_op(self):
+		return self._summary_op
+	
+
 class WindowFeatureRule(FeatureRule):
 	"""A rule applied to window features."""
 	def __init__(self, feature_name: str, window_size: int, window_op: str, threshold: float, relation: Relation, feature_module: str = None):
@@ -838,6 +865,30 @@ class BoutTable(Table):
 
 		return cls.combine_data(all_annotations)
 
+	def add_bout_features(self, feature_file: Path):
+		"""Adds feature-based information into bout table.
+
+		Args:
+			feature_file: file containing the feature data
+
+		Raises:
+			ValueError when feature file contains data where the frame count does not match the bout table. This is only typical when tables have been merged.
+		"""
+		supported_features = [
+			FeatureInEvent('distance', 'features/per_frame/centroid_velocity_mag centroid_velocity_mag', np.sum),
+			FeatureInEvent('closest_id', 'closest_identities', np.median),
+			# FeatureInEvent('closest_lixit', '', np.median),
+			# FeatureInEvent('closest_corner', '', np.median),
+		]
+		feature_obj = JABSFeature(feature_file)
+		for cur_feature in supported_features:
+			try:
+				feature_data = feature_obj.get_key_data(cur_feature.feature_key)
+				self._data[cur_feature.feature_name] = [cur_feature.summary_op(feature_data[x['start']:x['start'] + x['duration']]) for _, x in self._data.iterrows()]
+			# Not all features exist, so safely ignore them if they aren't present
+			except KeyError:
+				pass
+
 	def to_summary_table(self, bin_size_minutes: int = 60):
 		"""Converts bout information into binned summary table.
 
@@ -1218,12 +1269,13 @@ class JabsProject:
 		self._experiments = experiments
 
 	@classmethod
-	def from_prediction_folder(cls, project_folder: Path, settings: ClassifierSettings):
+	def from_prediction_folder(cls, project_folder: Path, settings: ClassifierSettings, feature_folder: Path):
 		"""Constructor based on a predction folder structure.
 
 		Args:
 			project_folder: Prediction project folder. Folder is recursively searched for all pose files.
 			settings: classifier settings to pass to experiment.
+			feature_folder: optional folder where feature data is stored to include additional event-based features
 
 		Returns:
 			JabsProject object containing all the poses in the project folder.
@@ -1244,6 +1296,8 @@ class JabsProject:
 		for _, meta_idxs in matched_exp_idxs.items():
 			experiment_poses = [x for i, x in enumerate(video_filenames) if i in meta_idxs]
 			new_experiment = Experiment.from_pose_files(experiment_poses, settings)
+			if feature_folder is not None:
+				new_experiment.add_bout_features(feature_folder)
 			experiments.append(new_experiment)
 
 		return cls(experiments)
@@ -1593,6 +1647,16 @@ class Experiment:
 					model_used = 'Undefined'
 		return centers, model_used
 
+	def add_bout_features(self, feature_folder: Path):
+		"""Attempts to add feature-based characteristics to bouts.
+
+		Args:
+			feature_folder: folder where features are located
+		"""
+		for cur_pose, cur_prediction in zip(self._pose_files, self._predictions):
+			feature_file = self.find_features(cur_pose, feature_folder)[0]
+			cur_prediction.add_bout_features(feature_file)
+
 	def get_behavior_bouts(self):
 		"""Generates behavior bout data for a given behavior.
 
@@ -1692,6 +1756,7 @@ class JABSFeature:
 		# Note that this expects /path/to/feature/files/[POSE_FILE]/[ANIMAL_IDX]/features.h5 as the structure
 		pose_file = str(Path(*Path(feature_file).parts[:-2])) + '.h5'
 		self._video_metadata = VideoMetadata(pose_file)
+		# TODO: this is an unhandled string to int casting
 		self._animal_idx = int(Path(feature_file).parts[-2])
 		self._file = feature_file
 		# _populate_window_ops will populate modules as well, but may fail if window features are not cached...
@@ -1713,6 +1778,23 @@ class JABSFeature:
 	def feature_keys(self):
 		"""Dataframe containing the available feature keys."""
 		return self._feature_keys.copy()
+
+	def get_key_data(self, key: str):
+		"""Retrieves raw data contained within a feature file.
+
+		Args:
+			key: fully defined key to extract from the feature file
+
+		Returns:
+			np.ndarray containing the requested data
+
+		Notes:
+			This function is available, but it is preferred to use `get_per_frame_feature` or `get_window_feature` instead.
+		"""
+		with h5py.File(self._file, 'r') as f:
+			retrieved_data = f[key][:]
+
+		return retrieved_data
 
 	def get_per_frame_feature(self, feature_key: str, feature_module: str = None):
 		"""Retrieves the stored feature vector with a given key.
