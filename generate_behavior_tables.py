@@ -48,11 +48,11 @@ def generate_behavior_tables(args, behavior_args: {}):
 	)
 	project = JabsProject.from_prediction_folder(args.project_folder, behavior_settings, args.feature_folder)
 	bout_table = project.get_bouts()
-	bout_out_file = f'{args.out_prefix}_bouts.csv'
+	bout_out_file = f'{args.out_prefix}_{behavior_args["behavior"]}_bouts.csv'
 	bout_table.to_file(bout_out_file, True)
 	# Convert project into binned data
 	bin_table = bout_table.to_summary_table(args.out_bin_size)
-	bin_out_file = f'{args.out_prefix}_summaries.csv'
+	bin_out_file = f'{args.out_prefix}_{behavior_args["behavior"]}_summaries.csv'
 	bin_table.to_file(bin_out_file, True)
 
 
