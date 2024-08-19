@@ -875,10 +875,10 @@ class BoutTable(Table):
 			ValueError when feature file contains data where the frame count does not match the bout table. This is only typical when tables have been merged.
 		"""
 		supported_features = [
-			FeatureInEvent('distance', 'features/per_frame/centroid_velocity_mag centroid_velocity_mag', np.sum),
+			FeatureInEvent('distance', 'features/per_frame/centroid_velocity_mag centroid_velocity_mag', lambda x: np.nansum(x, initial=0)),
 			FeatureInEvent('closest_id', 'closest_identities', np.median),
-			# FeatureInEvent('closest_lixit', '', np.median),
-			# FeatureInEvent('closest_corner', '', np.median),
+			FeatureInEvent('closest_lixit', 'closest_lixit', np.median),
+			FeatureInEvent('closest_corner', 'closest_corners', np.median),
 		]
 		feature_obj = JABSFeature(feature_file)
 		for cur_feature in supported_features:
