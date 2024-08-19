@@ -954,24 +954,35 @@ class BoutTable(Table):
 		event_df['adjusted_start'] = [BoutTable.time_to_frame(x['time'], str(start_time), 30) + x['start'] for row_idx, x in event_df.iterrows()]
 		event_df['adjusted_end'] = event_df['adjusted_start'] + event_df['duration']
 		event_df['percent_bout'] = 1.0
+
+		# Slice the bouts that span bins
+		time_cut_frames = [BoutTable.time_to_frame(str(x), str(start_time), fps) for x in time_idx]
+		for cur_cut in time_cut_frames:
+			bouts_to_cut = np.logical_and(cur_cut > event_df['adjusted_start'], cur_cut < event_df['adjusted_end'])
+			if np.any(bouts_to_cut):
+				# Make copies of the new 2 halves
+				first_half = event_df[bouts_to_cut].copy()
+				first_half['adjusted_end'] = cur_cut
+				new_durations = first_half['adjusted_end'] - first_half['adjusted_start']
+				first_half['percent_bout'] = new_durations / first_half['duration']
+				first_half['duration'] = new_durations
+				#
+				second_half = event_df[bouts_to_cut].copy()
+				second_half['start'] = second_half['start'] + cur_cut - second_half['adjusted_start']
+				second_half['adjusted_start'] = cur_cut
+				second_half['percent_bout'] = 1 - first_half['percent_bout']
+				second_half['duration'] = second_half['adjusted_end'] - second_half['adjusted_start']
+				#
+				# Adjust the event dataframe based on these cuts
+				# Delete the original bouts
+				event_df = event_df.drop(index=np.where(bouts_to_cut)[0])
+				# Add in the new ones
+				event_df = pd.concat([event_df, first_half, second_half]).reset_index(drop=True)
+
 		# Summarize each time bin
 		results_df_list = []
-		for t1, t2 in zip(time_idx[:-1], time_idx[1:]):
-			start_frame = BoutTable.time_to_frame(str(t1), str(start_time), fps)
-			end_frame = BoutTable.time_to_frame(str(t2), str(start_time), fps)
+		for t1, t2, start_frame, end_frame in zip(time_idx[:-1], time_idx[1:], time_cut_frames[:-1], time_cut_frames[1:]):
 			bins_to_summarize = event_df[np.logical_and(event_df['adjusted_start'] >= start_frame, event_df['adjusted_end'] <= end_frame)]
-			cut_start = pd.DataFrame.copy(event_df[np.logical_and(event_df['adjusted_start'] < start_frame, event_df['adjusted_end'] >= start_frame)])
-			if len(cut_start) > 0:
-				new_duration = cut_start['duration'] - (cut_start['adjusted_start'] - start_frame)
-				cut_start['percent_bout'] = new_duration / cut_start['duration']
-				cut_start['duration'] = new_duration
-				bins_to_summarize = pd.concat([bins_to_summarize, cut_start])
-			cut_end = pd.DataFrame.copy(event_df[np.logical_and(event_df['adjusted_start'] < end_frame, event_df['adjusted_end'] >= end_frame)])
-			if len(cut_end) > 0:
-				new_duration = cut_end['duration'] - (end_frame - cut_end['adjusted_start'])
-				cut_end['percent_bout'] = new_duration / cut_end['duration']
-				cut_end['duration'] = new_duration
-				bins_to_summarize = pd.concat([bins_to_summarize, cut_end])
 			# With bins_to_summarize as needed
 			# This operation throws a warning which can be ignored, so mute it before throwing...
 			pd.options.mode.chained_assignment = None
@@ -985,7 +996,7 @@ class BoutTable(Table):
 			results['time_no_pred'] = bins_to_summarize.loc[bins_to_summarize['is_behavior'] == -1, 'duration'].sum()
 			results['time_not_behavior'] = bins_to_summarize.loc[bins_to_summarize['is_behavior'] == 0, 'duration'].sum()
 			results['time_behavior'] = bins_to_summarize.loc[bins_to_summarize['is_behavior'] == 1, 'duration'].sum()
-			results['bout_behavior'] = len(bins_to_summarize.loc[bins_to_summarize['is_behavior'] == 1] )
+			results['bout_behavior'] = len(bins_to_summarize.loc[bins_to_summarize['is_behavior'] == 1])
 			if 'distance' in bins_to_summarize.keys():
 				results['not_behavior_dist'] = bins_to_summarize.loc[bins_to_summarize['is_behavior'] == 0, 'calc_dist'].sum()
 				results['behavior_dist'] = bins_to_summarize.loc[bins_to_summarize['is_behavior'] == 1, 'calc_dist'].sum()
