@@ -22,10 +22,10 @@ Only python3.10 has been tested.
 
 # Generating Behavior Tables
 
-## Multi-Animal Multi-Day Table Generation
+## Classifier-based Table Generation
 
 ```
-python3 generate_behavior_tables.py --project_folder /path/to/project/folder --out_prefix results --behavior Behavior_1 --behavior Behavior_2
+python3 generate_behavior_tables.py --project_folder /path/to/project/folder/ --out_prefix results --behavior Behavior_1 --behavior Behavior_2
 ```
 
 This will generate 2 behavior table files per behavior detected in the project folder. You must include `--behavior BehaviorName` to generate a behavior table for each behavior. If you are unsure which behavior are available in a given project folder, you can check by intentionally guessing incorrectly.
@@ -36,17 +36,18 @@ To see all options with a short description, run:
 python3 generate_behavior_tables.py --help
 ```
 
-## Single Animal OFA Table Generation
+## JABS-feature-based Table Generation
 
-This feature is not yet implemented.
+```
+python3 heuristic_classify.py --behavior Heuristic_Behavior --project_folder /path/to/project/folder/ --feature_folder /path/to/project/features/ --feature_key 'BASE_NECK speed' --relation '<' --threshold '1'
+```
 
-## Activity Breakpoints
+This will generate 2 behavior table files based on the threshold applied to the feature. Additional `--feature_key <key> --relation <relation> --threshold <threshold>` can be used in succession to indicate all conditions at the same time (e.g. `feature_1 < threshold_1 AND feature_2 > threshold_2`).
 
-There are implicit activity tables generated based on simply mouse motion. Each activity table produced is based on a single threshold of motion. The user can set multiple thresholds to apply then use downstream tools to merge each filter into activity bands (eg 10cm/s to 20cm/s).
-
-The tables generated are strictly "greater than" the listed threshold for a behavior state of "1". Additionally, bouts of "0" are "less than" the threshold.
-
-Default activity breakpoints are set to a single breakpoint indicating "inactive" and "active" at 2.5cm/s.
+To see all options with a short description, run:
+```
+python3 heuristic_classify.py --help
+```
 
 ## Notes on Filtering
 
