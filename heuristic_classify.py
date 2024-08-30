@@ -57,11 +57,11 @@ def main(argv):
 	project = JabsProject.from_feature_folder(args.project_folder, f_settings, args.feature_folder)
 
 	bout_table = project.get_bouts()
-	bout_out_file = f'{args.out_prefix}_bouts.csv'
+	bout_out_file = f'{args.out_prefix}_{args.behavior}_bouts.csv'
 	bout_table.to_file(bout_out_file, True)
 
-	bin_table = bout_table.to_summary_table()
-	bin_out_file = f'{args.out_prefix}_summaries.csv'
+	bin_table = bout_table.to_summary_table(args.out_bin_size)
+	bin_out_file = f'{args.out_prefix}_{args.behavior}_summaries.csv'
 	bin_table.to_file(bin_out_file, True)
 
 
