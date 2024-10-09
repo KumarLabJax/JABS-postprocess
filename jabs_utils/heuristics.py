@@ -23,7 +23,7 @@ class Expression:
 
 	def add(self, other: Expression):
 		"""Addition operator to another expression."""
-		return Expression(np.sum(self.data, other.data), f'({self.description} + {other.description})')
+		return Expression(np.add(self.data, other.data), f'({self.description} + {other.description})')
 
 	def subtract(self, other: Expression):
 		"""Subtraction operator to another expression."""
@@ -82,7 +82,7 @@ class Expression:
 
 	def __repr__(self):
 		return self.__str__()
-	
+
 
 class Relation:
 	"""Boolean vector of an inequality or logical relation."""
