@@ -1,0 +1,25 @@
+# Freeze
+# Mouse is immobile for at least 3s
+behavior: 
+  Freeze
+
+interpolate:
+  5
+
+stitch:
+  5
+
+min_bout:
+  90
+
+definition:
+  all:
+   - less than:
+     - features/per_frame/point_speeds BASE_NECK speed
+     - 2.0
+   - less than:
+     - features/per_frame/point_speeds NOSE speed
+     - 2.0
+   - less than:
+     - features/per_frame/point_speeds BASE_TAIL speed
+     - 2.0
