@@ -1,0 +1,24 @@
+# Corner Time
+# Within 20% distance of any 2 walls
+minimum:
+ - 2
+ - less than:
+   - wall_distances/wall_0
+   - divide:
+     - avg_wall_length
+     - 5
+ - less than:
+   - wall_distances/wall_1
+   - divide:
+     - avg_wall_length
+     - 5
+ - less than:
+   - wall_distances/wall_2
+   - divide:
+     - avg_wall_length
+     - 5
+ - less than:
+   - wall_distances/wall_3
+   - divide:
+     - avg_wall_length
+     - 5

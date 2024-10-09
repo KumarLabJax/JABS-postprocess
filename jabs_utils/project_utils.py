@@ -5,24 +5,18 @@ import pandas as pd
 import numpy as np
 import re
 import os
-import enum
 from pathlib import Path
 from datetime import datetime
 from typing import List, Union
 from copy import deepcopy
+import yaml
 
 from jabs_utils.identity import VideoTracklet, Fragment
+from jabs_utils.heuristics import Relation
+from jabs_utils.features import JABSFeature
+from jabs_utils.metadata import VideoMetadata, ClassifierSettings, FeatureSettings, PREDICTION_REGEX_STR, FEATURE_REGEX_STR, POSE_REGEX_STR
 
 BEHAVIOR_CLASSIFY_VERSION = 1
-POSE_REGEX_STR = '_pose_est_v([2-6]).h5'
-PREDICTION_REGEX_STR = '_behavior.h5'
-FEATURE_REGEX_STR = 'features.h5'
-DATE_REGEX_STR = '[0-9]{4}-[0-9]{2}-[0-9]{2}'
-DATE_FMT = '%Y-%m-%d'
-TIME_REGEX_STR = '[0-9]{2}-[0-9]{2}-[0-9]{2}'
-TIME_FMT = '%H-%M-%S'
-TIMESTAMP_REGEX_STR = f'{DATE_REGEX_STR}_{TIME_REGEX_STR}'
-TIMESTAMP_FMT = f'{DATE_FMT}_{TIME_FMT}'
 
 
 class MissingBehaviorException(ValueError):
@@ -44,144 +38,6 @@ class InvalidTableError(ValueError):
 	def __init__(self, message):
 		"""Default initialization."""
 		super().__init__(message)
-
-
-class ClassifierSettings:
-	"""Settings associated with a classifiers predictions."""
-	def __init__(self, behavior: str, interpolate: int = 5, stitch: int = 5, min_bout: int = 5):
-		"""Initializes a settings object.
-
-		Args:
-			behavior: string containing the name of the behavior
-			interpolate: number of frames where predictions will be interpolated when data is missing
-			stitch: number of frames between "behavior" predictions that will be merged
-			min_bout: minimum number of frames for "behavior" predictions to remain
-
-		Todo:
-			Add back in the functionality to change thresholds (useful for searching for data which has poor/odd probabilities).
-			This feature added 2 more parameters:
-				threshold_min: low threshold for calling behavior (default 0.5)
-				threshold_max: high threshold for calling behavior (default 1.0)
-		"""
-		self._behavior = behavior
-		self._interpolate = interpolate
-		self._stitch = stitch
-		self._min_bout = min_bout
-
-	@property
-	def behavior(self):
-		return self._behavior
-	
-	@property
-	def interpolate(self):
-		return self._interpolate
-	
-	@property
-	def stitch(self):
-		return self._stitch
-	
-	@property
-	def min_bout(self):
-		return self._min_bout
-
-	def __str__(self):
-		return f'Settings: behavior={self._behavior}, interpolate={self._interpolate}, stitch={self._stitch}, filter={self._min_bout}'
-
-	def __repr__(self):
-		return self.__str__()
-
-
-class Relation(enum.IntEnum):
-	"""A relation operator."""
-	LESS_THAN = 0
-	LESS_THAN_EQUAL = 1
-	GREATER_THAN = 2
-	GREATER_THAN_EQUAL = 3
-
-	@classmethod
-	def from_str(cls, s: str):
-		"""Creates a Relation from a string.
-
-		Args:
-			s: string to try and conform to a relation
-
-		Returns:
-			The closest enum to the input
-
-		Raises:
-			TypeError if there isn't a closest enum
-		"""
-		s_lower = s.lower()
-		if s_lower in cls.get_less_than_options():
-			return cls.LESS_THAN
-		elif s_lower in cls.get_less_than_equal_options():
-			return cls.LESS_THAN_EQUAL
-		elif s_lower in cls.get_geater_than_options():
-			return cls.GREATER_THAN
-		elif s_lower in cls.get_geater_than_equal_options():
-			return cls.GREATER_THAN_EQUAL
-		raise ValueError(f'Invalid relationship operator, supplied: "{s}"')
-
-	@staticmethod
-	def get_less_than_options():
-		return ['<', 'lt', 'less than']
-
-	@staticmethod
-	def get_less_than_equal_options():
-		return ['<=', '=<', 'lte', 'less than equal', 'less than or equal']
-
-	@staticmethod
-	def get_geater_than_options():
-		return ['>', 'gt', 'greater than']
-
-	@staticmethod
-	def get_geater_than_equal_options():
-		return ['>=', '=>', 'gte', 'greater than equal', 'greater than or equal']
-
-	@staticmethod
-	def get_all_options():
-		return Relation.get_less_than_options() + Relation.get_less_than_equal_options() + Relation.get_geater_than_options() + Relation.get_geater_than_equal_options()
-
-	def __str__(self):
-		strs = ['<', '<=', '>', '>=']
-		return strs[self.value]
-
-	def __repr__(self):
-		return self.__str__()
-
-
-class FeatureRule:
-	"""A single rule applied to a feature."""
-	def __init__(self, feature_name: str, threshold: float, relation: Relation, feature_module: str = None):
-		"""Constructs a feature filter rule.
-
-		Args:
-			feature_name: feature to apply the filter on
-			threshold: threshold value for a decision boundary
-			relation: the relation for positive events of this rule
-			feature_module: (optional) module the feature belongs to. Only required if a feature exists in 2 different modules
-		"""
-		self._feature = feature_name
-		self._threshold = threshold
-		self._relation = relation if isinstance(relation, Relation) else Relation.from_str(relation)
-
-	@property
-	def feature(self):
-		return self._feature
-
-	@property
-	def threshold(self):
-		return self._threshold
-
-	@property
-	def relation(self):
-		return self._relation
-
-	def __str__(self):
-		return f'{self._feature} {self._relation} {self._threshold}'
-
-	def __repr__(self):
-		return self.__str__()
 
 
 class FeatureInEvent:
@@ -209,131 +65,6 @@ class FeatureInEvent:
 	@property
 	def summary_op(self):
 		return self._summary_op
-	
-
-class WindowFeatureRule(FeatureRule):
-	"""A rule applied to window features."""
-	def __init__(self, feature_name: str, window_size: int, window_op: str, threshold: float, relation: Relation, feature_module: str = None):
-		"""Constructs a window feature filter rule.
-
-		Args:
-			feature_name: feature to apply the filter on
-			window_size: 
-			threshold: threshold value for a decision boundary
-			relation: the relation for positive events of this rule
-			feature_module: (optional) module the feature belongs to. Only required if a feature exists in 2 different modules
-		"""
-		super().__init__(feature_name, threshold, relation, feature_module)
-
-		self._window_size = window_size
-		self._window_op = window_op
-
-	@property
-	def window_size(self):
-		return self._window_size
-
-	@property
-	def window_op(self):
-		return self._window_op
-
-	def __str__(self):
-		return f'{self._window_op} {self._feature} {self._relation} {self._threshold}, window_size = {self._window_size}'
-
-	def __repr__(self):
-		return self.__str__()
-		
-
-class FeatureSettings(ClassifierSettings):
-	"""Settings associated with a feature-based classifier."""
-	def __init__(self, behavior: str, rules: List[FeatureRule], interpolate: int = 5, stitch: int = 5, min_bout: int = 5):
-		"""Initializes a feature settings object.
-
-		Args:
-			behavior: string containing the name of the behavior
-			rules: list of rules which are combined with an "and" operation for defining an event classifier
-			interpolate: number of frames where predictions will be interpolated when data is missing
-			stitch: number of frames between "behavior" predictions that will be merged
-			min_bout: minimum number of frames for "behavior" predictions to remain
-		"""
-		super().__init__(behavior, interpolate, stitch, min_bout)
-		if len(rules) == 0:
-			raise ValueError('No rules provided for detecting events.')
-		self._rules = rules
-
-	@property
-	def rules(self):
-		return self._rules
-
-	def __str__(self):
-		return f'Settings: behavior={self._behavior}, interpolate={self._interpolate}, stitch={self._stitch}, filter={self._min_bout}, rules: {" and ".join([str(x) for x in self._rules])}'
-
-
-class VideoMetadata:
-	"""Metadata associated with an experimental video."""
-	def __init__(self, file: Path):
-		"""Initializes a VideoMetadata object.
-
-		Args:
-			file: a file pointing to a video, pose file, or behavior prediction file
-
-		Notes:
-			The filename can encode information pertaining to a specific video.
-		"""
-		self._original_file = Path(file)
-		self._folder = self._original_file.parent
-		file_str = self._original_file.name
-		self._video = self.pose_to_video(file_str)
-		time_search = re.search(TIMESTAMP_REGEX_STR, self._video)
-		video_start_time = time_search.group() if time_search is not None else '1970-01-01_00-00-00'
-		self._time = datetime.strptime(video_start_time, TIMESTAMP_FMT)
-		self._experiment = self._video[:time_search.start()] if time_search is not None else self._video
-		time_search = re.search(DATE_REGEX_STR, str(self._folder))
-		self._date_start = time_search.group() if time_search is not None else video_start_time[:10]
-
-	@property
-	def folder(self):
-		"""Folder of the original path supplied."""
-		return self._folder
-
-	@property
-	def time(self):
-		"""Time object parsed from the file pattern."""
-		return self._time
-
-	@property
-	def time_str(self):
-		"""Formatted version of the time string."""
-		return self._time.strftime('%Y-%m-%s %H:%M:%S')
-
-	@property
-	def date_start(self):
-		"""Date string parsed from folder pattern."""
-		return self._date_start
-
-	@property
-	def video(self):
-		"""Video basename, which is close to the original Path parsed, just with different suffixes removed."""
-		return self._video
-
-	@property
-	def experiment(self):
-		"""Experiment prefix."""
-		return self._experiment
-
-	@staticmethod
-	def pose_to_video(pose_file):
-		"""Converted pose file to expected video file.
-
-		Args:
-			pose_file: pose file to convert
-		"""
-		return re.sub(f'({POSE_REGEX_STR}|{PREDICTION_REGEX_STR}|\\.avi|\\.mp4)', '', str(pose_file))
-
-	def __str__(self):
-		return f'Video: {self._video}, Experiment: {self._experiment}, Time: {self.time_str}, Date: {self._date_start}'
-
-	def __repr__(self):
-		return self.__str__()
 
 
 class Bouts:
@@ -769,7 +500,7 @@ class Table:
 			# 'Out Bin Size': [self._settings.out_bin_size],
 		})
 		if isinstance(self._settings, FeatureSettings):
-			header_df['Feature Rules'] = ' and '.join([str(x) for x in self._settings.rules])
+			header_df['Feature Rules'] = self._settings.rules
 
 		with open(file, 'w') as f:
 			header_df.to_csv(f, header=True, index=False)
@@ -1113,42 +844,17 @@ class Prediction(BoutTable):
 			Prediction object based on feature thresholds in settings
 		"""
 		feature_obj = JABSFeature(feature_file)
+		with open(feature_settings.config_file, 'r') as f:
+			config_data = yaml.safe_load(f)
 
-		classification_vectors = []
-		for cur_feature_rule in feature_settings.rules:
-			if isinstance(cur_feature_rule, WindowFeatureRule):
-				feature_vector = feature_obj.get_window_feature(cur_feature_rule.feature, cur_feature_rule.window_size, cur_feature_rule.window_op)
-			else:
-				feature_vector = feature_obj.get_per_frame_feature(cur_feature_rule.feature)
+		heuristic_classifier = Relation.from_config(feature_obj, config_data)
 
-			if cur_feature_rule.relation == Relation.LESS_THAN:
-				call_vector = feature_vector < cur_feature_rule.threshold
-			elif cur_feature_rule.relation == Relation.LESS_THAN_EQUAL:
-				call_vector = feature_vector <= cur_feature_rule.threshold
-			elif cur_feature_rule.relation == Relation.GREATER_THAN:
-				call_vector = feature_vector > cur_feature_rule.threshold
-			elif cur_feature_rule.relation == Relation.GREATER_THAN_EQUAL:
-				call_vector = feature_vector >= cur_feature_rule.threshold
-			else:
-				raise ValueError(f'Rule relation {cur_feature_rule.relation} not supported (full rule: {cur_feature_rule}).')
+		# Make a copy of the settings before changing the rules
+		new_settings = feature_settings.copy()
+		new_settings.rules = heuristic_classifier.description
 
-			# Convert back to 3-state (1: behavior, 0: not behavior, -1: no feature)
-			call_vector = call_vector.astype(np.int8)
-			call_vector[np.isnan(feature_vector)] = -1
-
-			classification_vectors.append(call_vector)
-
-		classification_vectors = np.stack(classification_vectors)
-		# Note that np.all() casts to bool, so "true" here is all elements are either behavior or no feature
-		# any 0 values (not behavior) in a row will always evaluate to "false", yielding the desired "and" operation
-		final_calls = np.all(classification_vectors, axis=0).astype(np.int8)
-		# Note:
-		# We could allow the user to do a allow an "or" operation for missing features
-		# However, the logic here is to mark any frame where any of the features were missing as no prediction
-		final_calls[np.any(classification_vectors == -1, axis=0)] = -1
-
-		bout_data = Bouts.from_value_vector(final_calls)
-		bout_data.filter_by_settings(feature_settings)
+		bout_data = Bouts.from_value_vector(heuristic_classifier.data)
+		bout_data.filter_by_settings(new_settings)
 
 		bout_df = pd.DataFrame({
 			'animal_idx': feature_obj.animal_idx,
@@ -1157,7 +863,7 @@ class Prediction(BoutTable):
 			'is_behavior': bout_data.values,
 		})
 
-		return cls(feature_settings, bout_df, feature_obj.video_metadata)
+		return cls(new_settings, bout_df, feature_obj.video_metadata)
 
 	@classmethod
 	def from_no_prediction(cls, settings: ClassifierSettings, num_frames: int, num_animals: int, file: Path):
@@ -1751,158 +1457,3 @@ class Experiment:
 		sort_order = np.argsort(prediction_times)
 		self._pose_files = np.asarray(self._pose_files)[sort_order].tolist()
 		self._predictions = np.asarray(self._predictions)[sort_order].tolist()
-
-
-class JABSFeature:
-	"""Methods to interact with JABS feature data."""
-	def __init__(self, feature_file: Path):
-		"""Initializes a feature object.
-
-		Args:
-			feature_file: file to interact with feature data
-		"""
-		assert os.path.exists(feature_file)
-
-		# Transforms feature file into a metadata object
-		# Note that this expects /path/to/feature/files/[POSE_FILE]/[ANIMAL_IDX]/features.h5 as the structure
-		pose_file = str(Path(*Path(feature_file).parts[:-2])) + '.h5'
-		self._video_metadata = VideoMetadata(pose_file)
-		# TODO: this is an unhandled string to int casting
-		self._animal_idx = int(Path(feature_file).parts[-2])
-		self._file = feature_file
-		# _populate_window_ops will populate modules as well, but may fail if window features are not cached...
-		# Fall back to only populate per-frame keys
-		try:
-			self._populate_window_ops()
-		except KeyError:
-			self._populate_per_frame()
-
-	@property
-	def video_metadata(self):
-		return self._video_metadata
-	
-	@property
-	def animal_idx(self):
-		return self._animal_idx
-
-	@property
-	def feature_keys(self):
-		"""Dataframe containing the available feature keys."""
-		return self._feature_keys.copy()
-
-	def get_key_data(self, key: str):
-		"""Retrieves raw data contained within a feature file.
-
-		Args:
-			key: fully defined key to extract from the feature file
-
-		Returns:
-			np.ndarray containing the requested data
-
-		Notes:
-			This function is available, but it is preferred to use `get_per_frame_feature` or `get_window_feature` instead.
-		"""
-		with h5py.File(self._file, 'r') as f:
-			retrieved_data = f[key][:]
-
-		return retrieved_data
-
-	def get_per_frame_feature(self, feature_key: str, feature_module: str = None):
-		"""Retrieves the stored feature vector with a given key.
-
-		Args:
-			feature_key: key of the feature to retrieve
-			feature_module: Optional module which the features belong to
-
-		Returns:
-			np.ndarray containing the feature data
-
-		Raises:
-			ValueError if feature module is not provided and doesn't map uniquely
-			KeyError if feature key does not exist
-		"""
-		if feature_module is None:
-			feature_module = self.discover_feature_module(feature_key)
-
-		if not (
-			(self._feature_keys['module'] == feature_module)
-			& (self._feature_keys['feature'] == feature_key)
-		).any():
-			raise KeyError('Module and Feature key not available.')
-
-		feature_path = f'features/per_frame/{feature_module} {feature_key}'
-		with h5py.File(self._file, 'r') as f:
-			feature_data = f[feature_path][:]
-
-		return feature_data
-
-	def get_window_feature(self, feature_key: str, window_size: int, window_op: str, feature_module: str = None):
-		"""Retrieves the stored feature vector from a window feature.
-
-		Args:
-			feature_key: key of the feature to retrieve
-			window_size: window size of the window feature
-			window_op: window operation for the feature
-			feature_module: Optional module which the features belong to
-
-		Returns:
-			np.ndarray containing the feature data
-
-		Raises:
-			KeyError if the feature key, window size, or window op are not present
-		"""
-		if feature_module is None:
-			feature_module = self.discover_feature_module(feature_key)
-
-		if 'window_op' not in self._feature_keys:
-			raise KeyError(f'Feature file {self._file} does not contain window feature data.')
-		if not (
-			(self._feature_keys['module'] == feature_module)
-			& (self._feature_keys['window_op'] == window_op)
-			& (self._feature_keys['feature'] == feature_key)
-		).any():
-			raise KeyError('Module, Window Op, and Feature key not available.')
-
-		feature_key = f'features/window_features_{window_size}/{feature_module} {window_op} {feature_key}'
-
-		with h5py.File(self._file, 'r') as f:
-			feature_data = f[feature_key][:]
-
-		return feature_data
-
-	def discover_feature_module(self, feature_key: str):
-		"""Discovers the feature module given a key.
-
-		Args:
-			feature_key: feature to identify the module name
-
-		Returns:
-			module string of the feature
-
-		Raises:
-			ValueError if module is not unique
-		"""
-		discovered_feature_module = np.unique(self._feature_keys.loc[self._feature_keys['feature'] == feature_key, 'module'])
-		if len(discovered_feature_module) != 1:
-			raise ValueError(f'Feature {feature_key} does not map uniquely to a feature module. Found modules: {discovered_feature_module}')
-		return discovered_feature_module[0]
-
-	def _populate_per_frame(self):
-		"""Populates the available module-feature pairs."""
-		with h5py.File(self._file, 'r') as f:
-			available_features = list(f['features/per_frame'].keys())
-
-		self._feature_keys = pd.DataFrame([x.split(' ', 1) for x in available_features], columns=['module', 'feature'])
-
-	def _populate_window_ops(self):
-		"""Populates the available window operation data."""
-		with h5py.File(self._file, 'r') as f:
-			feature_grps = list(f['features'].keys())
-		self._window_sizes = [x.split('_')[2] for x in feature_grps if x.startswith('window_features_')]
-
-		if len(self._window_sizes) > 0:
-			with h5py.File(self._file, 'r') as f:
-				window_keys = list(f[f'features/window_features_{self._window_sizes[0]}'].keys())
-			self._feature_keys = pd.DataFrame([x.split(' ', 2) for x in window_keys], columns=['module', 'window_op', 'feature'])
-		else:
-			raise KeyError('No window features in this feature file.')
