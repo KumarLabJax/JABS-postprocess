@@ -2,6 +2,7 @@ from pathlib import Path
 import re
 from datetime import datetime
 from copy import deepcopy
+import yaml
 
 
 POSE_REGEX_STR = '_pose_est_v([2-6]).h5'
@@ -62,17 +63,52 @@ class ClassifierSettings:
 
 class FeatureSettings(ClassifierSettings):
 	"""Settings associated with a feature-based classifier."""
-	def __init__(self, behavior: str, config_file: str, interpolate: int = 5, stitch: int = 5, min_bout: int = 5):
+	def __init__(self, config_file: str, interpolate: int = None, stitch: int = None, min_bout: int = None):
 		"""Initializes a feature settings object.
 
 		Args:
-			behavior: string containing the name of the behavior
 			config_file: configuration file indicating heuristic rules
 			interpolate: number of frames where predictions will be interpolated when data is missing
 			stitch: number of frames between "behavior" predictions that will be merged
 			min_bout: minimum number of frames for "behavior" predictions to remain
+
+		Notes:
+			Configuration file can contain definitions for interpolation, stitching, and filtering.
+			Using values here will override those settings.
 		"""
-		super().__init__(behavior, interpolate, stitch, min_bout)
+		with open(config_file, 'r') as f:
+			config_data = yaml.safe_load(f)
+
+		# 2 required configuration keys:
+		assert 'behavior' in config_data.keys()
+		assert 'definition' in config_data.keys()
+		behavior = config_data['behavior']
+
+		if interpolate is not None:
+			set_interpolate = interpolate
+		else:
+			if 'interpolate' in config_data.keys():
+				set_interpolate = config_data['interpolate']
+			else:
+				raise ValueError('Interpolation unset both via constructor call and configuration. One of the two must be used.')
+
+		if stitch is not None:
+			set_stitch = stitch
+		else:
+			if 'stitch' in config_data.keys():
+				set_stitch = config_data['stitch']
+			else:
+				raise ValueError('Stitching unset both via constructor call and configuration. One of the two must be used.')
+
+		if min_bout is not None:
+			set_min_bout = min_bout
+		else:
+			if 'min_bout' in config_data.keys():
+				set_min_bout = config_data['min_bout']
+			else:
+				raise ValueError('Minimum Bout Length unset both via constructor call and configuration. One of the two must be used.')
+
+		super().__init__(behavior, set_interpolate, set_stitch, set_min_bout)
 		self._config_file = config_file
 		self._rules = None
 

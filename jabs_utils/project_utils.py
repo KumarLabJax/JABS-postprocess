@@ -847,7 +847,9 @@ class Prediction(BoutTable):
 		with open(feature_settings.config_file, 'r') as f:
 			config_data = yaml.safe_load(f)
 
-		heuristic_classifier = Relation.from_config(feature_obj, config_data)
+		assert 'definition' in config_data.keys()
+
+		heuristic_classifier = Relation.from_config(feature_obj, config_data['definition'])
 
 		# Make a copy of the settings before changing the rules
 		new_settings = feature_settings.copy()
