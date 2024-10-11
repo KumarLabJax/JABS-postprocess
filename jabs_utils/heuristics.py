@@ -103,17 +103,24 @@ class Relation:
 				raise ValueError(f'Inequality operations can only summarize expression vectors, but at least 1 boolean vector was included. Included expression: {", ".join([x.description for x in operands])}')
 
 			if relation in self.get_less_than_options():
-				self._data = operands[0].data < operands[1].data
+				self._data = np.less(operands[0].data, operands[1].data)
 				self._description = f'{operands[0].description} < {operands[1].description}'
 			elif relation in self.get_less_than_equal_options():
-				self._data = operands[0].data <= operands[1].data
+				self._data = np.less_equal(operands[0].data, operands[1].data)
 				self._description = f'{operands[0].description} <= {operands[1].description}'
 			elif relation in self.get_geater_than_options():
-				self._data = operands[0].data > operands[1].data
+				self._data = np.greater(operands[0].data, operands[1].data)
 				self._description = f'{operands[0].description} > {operands[1].description}'
 			elif relation in self.get_geater_than_equal_options():
-				self._data = operands[0].data >= operands[1].data
+				self._data = np.greater_equal(operands[0].data, operands[1].data)
 				self._description = f'{operands[0].description} >= {operands[1].description}'
+			# NANs always evaluate to false, so change to 3-state
+			# -1: NAN in comparison
+			# 0: False
+			# 1: True
+			self._data = self._data.astype(np.int8)
+			self._data[np.isnan(operands[0].data)] = -1
+			self._data[np.isnan(operands[1].data)] = -1
 
 		# Logical operations
 		elif relation in self.get_logical_options():
@@ -121,7 +128,7 @@ class Relation:
 			# Some logical operations require 1 operand to be a scalar
 			scalar_ops = [x for x in operands if x.data.ndim == 0]
 			expression_ops = [x for x in operands if not x.data.ndim == 0]
-			bool_mat = np.stack([x.data for x in expression_ops])
+			call_matrix = np.stack([x.data for x in expression_ops])
 			if len(scalar_ops) > 0:
 				scalars = np.stack([x.data for x in scalar_ops])
 			else:
@@ -131,19 +138,25 @@ class Relation:
 				raise ValueError(f'Logical operations can only summarize boolean vectors, but at least 1 expression was included. Included comparisons: {op_str}')
 
 			if relation in self.get_any_options():
-				self._data = np.any(bool_mat, axis=0)
+				self._data = np.any(call_matrix > 0, axis=0)
 				self._description = f'Any of: ({op_str})'
 			if relation in self.get_all_options():
-				self._data = np.all(bool_mat, axis=0)
+				self._data = np.all(call_matrix > 0, axis=0)
 				self._description = f'All of: ({op_str})'
 			if relation in self.get_minimum_options():
 				assert len(scalars) == 1
-				self._data = np.sum(bool_mat, axis=0) >= scalars[0]
+				self._data = np.sum(call_matrix > 0, axis=0) >= scalars[0]
 				self._description = f'Minimum of {scalars[0]}: ({op_str})'
 			if relation in self.get_maximum_options():
 				assert len(scalars) == 1
-				self._data = np.sum(bool_mat, axis=0) <= scalars[0]
+				self._data = np.sum(call_matrix > 0, axis=0) <= scalars[0]
 				self._description = f'Maximum of {scalars[0]}: ({op_str})'
+
+			self._data = self._data.astype(np.int8)
+			# Adjust the calls to properly handle NANs
+			# If any of the sub-calls were unable to make a call, don't make a call
+			missing_calls = np.any(call_matrix == 1, axis=0)
+			self._data[missing_calls] = -1
 		else:
 			raise ValueError(f'Relation "{relation}" not recognized.')
 
