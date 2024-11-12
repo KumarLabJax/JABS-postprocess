@@ -1249,9 +1249,11 @@ class Experiment:
 		Raises:
 			MissingFeatureException if no feature files found
 		"""
+		# Feature folders are based on video, not pose file
+		pose_no_suffix = re.sub(POSE_REGEX_STR, '', Path(pose).name)
 		# Test both a generic path and a path relative to the pose file
-		feature_folder_generic = Path(feature_folder) / Path(pose).stem
-		feature_folder_pose_rel = Path(pose).parent / Path(feature_folder) / Path(pose).stem
+		feature_folder_generic = Path(feature_folder) / Path(pose_no_suffix).stem
+		feature_folder_pose_rel = Path(pose).parent / Path(feature_folder) / Path(pose_no_suffix).stem
 		if os.path.exists(feature_folder_generic):
 			feature_folder = feature_folder_generic
 		elif os.path.exists(feature_folder_pose_rel):
