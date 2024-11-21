@@ -606,7 +606,12 @@ class BoutTable(Table):
 			ValueError when feature file contains data where the frame count does not match the bout table. This is only typical when tables have been merged.
 		"""
 		supported_features = [
-			FeatureInEvent('distance', 'features/per_frame/centroid_velocity_mag centroid_velocity_mag', lambda x: np.nansum(x, initial=0)),
+			# Distance is based on velocity in [unit]/s.
+			# Sum should exclude the fps part, which is currently hard-coded to 30fps
+			# TODO:
+			# This 30 shouldn't be hard-coded twice and instead should find an fps value
+			# However, this value is not yet carried into feature files
+			FeatureInEvent('distance', 'features/per_frame/centroid_velocity_mag centroid_velocity_mag', lambda x: np.nansum(x, initial=0) / 30),
 			FeatureInEvent('closest_id', 'closest_identities', np.median),
 			FeatureInEvent('closest_lixit', 'closest_lixit', np.median),
 			FeatureInEvent('closest_corner', 'closest_corners', np.median),
