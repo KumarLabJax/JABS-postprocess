@@ -617,7 +617,7 @@ class BoutTable(Table):
 				feature_data = feature_obj.get_key_data(cur_feature.feature_key)
 				self._data[cur_feature.feature_name] = [cur_feature.summary_op(feature_data[x['start']:x['start'] + x['duration']]) for _, x in self._data.iterrows()]
 			# Not all features exist, so safely ignore them if they aren't present
-			except KeyError:
+			except (KeyError, ValueError):
 				pass
 
 	def to_summary_table(self, bin_size_minutes: int = 60):
@@ -1038,6 +1038,7 @@ class JabsProject:
 		experiments = []
 		for cur_pose in discovered_pose_files:
 			new_experiment = Experiment.from_features(cur_pose, feature_settings, feature_folder)
+			new_experiment.add_bout_features(feature_folder)
 			experiments.append(new_experiment)
 
 		return cls(experiments)
