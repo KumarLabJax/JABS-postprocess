@@ -122,10 +122,10 @@ class JABSFeature:
 		base_features = pd.DataFrame([['features/per_frame/' + x] + x.split(' ', 1) for x in available_features], columns=['key', 'module', 'feature'])
 
 		self._window_sizes = [x.split('_')[2] for x in feature_grps if x.startswith('window_features_')]
+		discovered_window_keys = []
 		if len(self._window_sizes) > 0:
 			with h5py.File(self._file, 'r') as f:
 				window_keys = list(f[f'features/window_features_{self._window_sizes[0]}'].keys())
-			discovered_window_keys = []
 			for cur_window in self._window_sizes:
 				next_window_keys = pd.DataFrame([[f'features/window_features_{cur_window}/{x}'] + x.split(' ', 1) + [cur_window] for x in window_keys], columns=['key', 'module', 'feature', 'window_size'])
 				discovered_window_keys.append(next_window_keys)
