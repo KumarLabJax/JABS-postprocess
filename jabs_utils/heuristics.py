@@ -155,7 +155,7 @@ class Relation:
 			self._data = self._data.astype(np.int8)
 			# Adjust the calls to properly handle NANs
 			# If any of the sub-calls were unable to make a call, don't make a call
-			missing_calls = np.any(call_matrix == 1, axis=0)
+			missing_calls = np.any(call_matrix == -1, axis=0)
 			self._data[missing_calls] = -1
 		else:
 			raise ValueError(f'Relation "{relation}" not recognized.')
