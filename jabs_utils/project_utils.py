@@ -1255,17 +1255,23 @@ class Experiment:
 		Raises:
 			MissingFeatureException if no feature files found
 		"""
-		# Feature folders are based on video, not pose file
+		# Feature folders are based on video or pose file, depending upon if it was generated in a project folder or with classify/generate features
 		pose_no_suffix = re.sub(POSE_REGEX_STR, '', Path(pose).name)
-		# Test both a generic path and a path relative to the pose file
-		feature_folder_generic = Path(feature_folder) / Path(pose_no_suffix).stem
-		feature_folder_pose_rel = Path(pose).parent / Path(feature_folder) / Path(pose_no_suffix).stem
-		if os.path.exists(feature_folder_generic):
-			feature_folder = feature_folder_generic
-		elif os.path.exists(feature_folder_pose_rel):
-			feature_folder = feature_folder_pose_rel
+		pose_no_ext = Path(pose).stem
+		# Test both a generic path and a relative path
+		folder_generic = Path(feature_folder)
+		folder_pose_rel = Path(pose).parent / Path(feature_folder)
+
+		if os.path.exists(folder_generic / Path(pose_no_suffix)):
+			feature_folder = folder_generic / Path(pose_no_suffix)
+		elif os.path.exists(folder_pose_rel / Path(pose_no_suffix)):
+			feature_folder = folder_pose_rel / Path(pose_no_suffix)
+		elif os.path.exists(folder_generic / Path(pose_no_ext)):
+			feature_folder = folder_generic / Path(pose_no_ext)
+		elif os.path.exists(folder_pose_rel / Path(pose_no_ext)):
+			feature_folder = folder_pose_rel / Path(pose_no_ext)
 		else:
-			raise MissingFeatureException(f'Feature folder not found for {Path(pose).stem} (searching {feature_folder_generic} and {feature_folder_pose_rel}).')
+			raise MissingFeatureException(f'Feature folder not found for {Path(pose).stem} (searching {folder_generic} and {folder_pose_rel}).')
 
 		found_feature_files = list(Path(feature_folder).glob(f'**/*{FEATURE_REGEX_STR}'))
 		if len(found_feature_files) == 0:
