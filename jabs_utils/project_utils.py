@@ -711,7 +711,7 @@ class BoutTable(Table):
 				#
 				# Adjust the event dataframe based on these cuts
 				# Delete the original bouts
-				event_df = event_df.drop(index=np.where(bouts_to_cut)[0])
+				event_df = event_df.reset_index(drop=True).drop(index=np.where(bouts_to_cut)[0])
 				# Add in the new ones
 				event_df = pd.concat([event_df, first_half, second_half]).reset_index(drop=True)
 
