@@ -438,6 +438,9 @@ class Table:
 		"""
 		first_settings = data_list[0].settings
 		all_bout_data = pd.concat([cur_data.data for cur_data in data_list])
+		# De-duplicate data
+		duplicated_data = all_bout_data.duplicated()
+		all_bout_data = all_bout_data[~duplicated_data].reset_index(drop=True)
 		return cls(first_settings, all_bout_data)
 
 	@classmethod
@@ -904,8 +907,11 @@ class Prediction(BoutTable):
 			Settings from only the first in list are carried forward
 		"""
 		first_settings = data_list[0].settings
-		all_bout_data = pd.concat([cur_data.data for cur_data in data_list])
 		first_video_metadata = data_list[0]._file_meta
+		all_bout_data = pd.concat([cur_data.data for cur_data in data_list])
+		# De-duplicate data
+		duplicated_data = all_bout_data.duplicated()
+		all_bout_data = all_bout_data[~duplicated_data].reset_index(drop=True)
 		return cls(first_settings, all_bout_data, first_video_metadata)
 
 	@staticmethod
