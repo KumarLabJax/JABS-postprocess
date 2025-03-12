@@ -1,7 +1,7 @@
 import sys
 import argparse
 
-from jabs_utils.project_utils import FeatureSettings, JabsProject
+from jabs_utils.project_utils import FeatureSettings, JabsProject, DEFAULT_INTERPOLATE, DEFAULT_STITCH, DEFAULT_MIN_BOUT
 
 
 def main(argv):
@@ -12,13 +12,14 @@ def main(argv):
 	parser.add_argument('--out_prefix', help='File prefix to write output tables (prefix_bouts.csv and prefix_summaries.csv), default=behavior', default='behavior', type=str)
 	parser.add_argument('--out_bin_size', help='Time duration used in binning the results, default=60', default=60, type=int)
 	parser.add_argument('--overwrite', help='Overwrites output files, default=False', default=False, action='store_true')
-	parser.add_argument('--interpolate_size', help='Maximum number of frames in which missing data will be interpolated, default=5', default=5, type=int)
-	parser.add_argument('--stitch_gap', help='Number of frames in which frames sequential behavior prediction bouts will be joined, default=5', default=5, type=int)
-	parser.add_argument('--min_bout_length', help='Minimum number of frames in which a behavior prediction must be to be considered, default=5', default=5, type=int)
+	parser.add_argument('--interpolate_size', help=f'Maximum number of frames in which missing data will be interpolated, default={DEFAULT_INTERPOLATE}', default=None, type=int)
+	parser.add_argument('--stitch_gap', help=f'Number of frames in which frames sequential behavior prediction bouts will be joined, default={DEFAULT_STITCH}', default=None, type=int)
+	parser.add_argument('--min_bout_length', help=f'Minimum number of frames in which a behavior prediction must be to be considered, default={DEFAULT_MIN_BOUT}', default=None, type=int)
 	#
 
 	args = parser.parse_args()
 
+	# Note that defaults here are None, but will be used by constructor if not set in the configuration file.
 	f_settings = FeatureSettings(args.behavior_config, args.interpolate_size, args.stitch_gap, args.min_bout_length)
 	project = JabsProject.from_feature_folder(args.project_folder, f_settings, args.feature_folder)
 
