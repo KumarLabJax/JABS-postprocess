@@ -3,7 +3,8 @@ import numpy as np
 import sys
 import argparse
 
-from jabs_utils.project_utils import JabsProject, ClassifierSettings, DEFAULT_INTERPOLATE, DEFAULT_STITCH, DEFAULT_MIN_BOUT
+from jabs_utils.project_utils import JabsProject, ClassifierSettings
+from jabs_utils.metadata import DEFAULT_INTERPOLATE, DEFAULT_STITCH, DEFAULT_MIN_BOUT
 
 
 def by_sets(iterator, start):

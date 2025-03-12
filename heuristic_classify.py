@@ -1,7 +1,8 @@
 import sys
 import argparse
 
-from jabs_utils.project_utils import FeatureSettings, JabsProject, DEFAULT_INTERPOLATE, DEFAULT_STITCH, DEFAULT_MIN_BOUT
+from jabs_utils.project_utils import FeatureSettings, JabsProject
+from jabs_utils.metadata import DEFAULT_INTERPOLATE, DEFAULT_STITCH, DEFAULT_MIN_BOUT
 
 
 def main(argv):
