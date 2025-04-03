@@ -15,10 +15,13 @@ TIME_FMT = '%H-%M-%S'
 TIMESTAMP_REGEX_STR = f'{DATE_REGEX_STR}_{TIME_REGEX_STR}'
 TIMESTAMP_FMT = f'{DATE_FMT}_{TIME_FMT}'
 
+DEFAULT_INTERPOLATE = 5
+DEFAULT_STITCH = 5
+DEFAULT_MIN_BOUT = 5
 
 class ClassifierSettings:
 	"""Settings associated with a classifiers predictions."""
-	def __init__(self, behavior: str, interpolate: int = 5, stitch: int = 5, min_bout: int = 5):
+	def __init__(self, behavior: str, interpolate: int = DEFAULT_INTERPOLATE, stitch: int = DEFAULT_STITCH, min_bout: int = DEFAULT_MIN_BOUT):
 		"""Initializes a settings object.
 
 		Args:
@@ -90,7 +93,7 @@ class FeatureSettings(ClassifierSettings):
 			if 'interpolate' in config_data.keys():
 				set_interpolate = config_data['interpolate']
 			else:
-				raise ValueError('Interpolation unset both via constructor call and configuration. One of the two must be used.')
+				set_interpolate = DEFAULT_INTERPOLATE
 
 		if stitch is not None:
 			set_stitch = stitch
@@ -98,7 +101,7 @@ class FeatureSettings(ClassifierSettings):
 			if 'stitch' in config_data.keys():
 				set_stitch = config_data['stitch']
 			else:
-				raise ValueError('Stitching unset both via constructor call and configuration. One of the two must be used.')
+				set_stitch = DEFAULT_STITCH
 
 		if min_bout is not None:
 			set_min_bout = min_bout
@@ -106,7 +109,7 @@ class FeatureSettings(ClassifierSettings):
 			if 'min_bout' in config_data.keys():
 				set_min_bout = config_data['min_bout']
 			else:
-				raise ValueError('Minimum Bout Length unset both via constructor call and configuration. One of the two must be used.')
+				set_min_bout = DEFAULT_MIN_BOUT
 
 		super().__init__(behavior, set_interpolate, set_stitch, set_min_bout)
 		self._config_file = config_file

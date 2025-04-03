@@ -4,6 +4,7 @@ import sys
 import argparse
 
 from jabs_utils.project_utils import JabsProject, ClassifierSettings
+from jabs_utils.metadata import DEFAULT_INTERPOLATE, DEFAULT_STITCH, DEFAULT_MIN_BOUT
 
 
 def by_sets(iterator, start):
@@ -64,15 +65,15 @@ def main(argv):
 	parser.add_argument('--out_bin_size', help='Time duration used in binning the results, default=60', default=60, type=int)
 	parser.add_argument('--overwrite', help='Overwrites output files, default=False', default=False, action='store_true')
 	parser.add_argument('--behavior', help='Behaviors to produce a table for. This argument can be used multiple times for different behaviors and is used in combination with interpolate_size, stitch_gap, and min_bout_length (e.g. each behavior will get different values).', nargs='+')
-	parser.add_argument('--interpolate_size', help='Maximum number of frames in which missing data will be interpolated, default=5', default=argparse.SUPPRESS)
-	parser.add_argument('--stitch_gap', help='Number of frames in which frames sequential behavior prediction bouts will be joined, default=5', default=argparse.SUPPRESS)
-	parser.add_argument('--min_bout_length', help='Minimum number of frames in which a behavior prediction must be to be considered, default=5', default=argparse.SUPPRESS)
+	parser.add_argument('--interpolate_size', help=f'Maximum number of frames in which missing data will be interpolated, default={DEFAULT_INTERPOLATE}', default=argparse.SUPPRESS)
+	parser.add_argument('--stitch_gap', help=f'Number of frames in which frames sequential behavior prediction bouts will be joined, default={DEFAULT_STITCH}', default=argparse.SUPPRESS)
+	parser.add_argument('--min_bout_length', help=f'Minimum number of frames in which a behavior prediction must be to be considered, default={DEFAULT_MIN_BOUT}', default=argparse.SUPPRESS)
 	#
 	behavior_parser = argparse.ArgumentParser(description='Behavior sub-parser.')
 	behavior_parser.add_argument('--behavior', help='Behaviors to produce a table for. This argument can be used multiple times for different behaviors and is used in combination with interpolate_size, stitch_gap, and min_bout_length (e.g. each behavior will get different values).', type=str)
-	behavior_parser.add_argument('--interpolate_size', help='Maximum number of frames in which missing data will be interpolated, default=5', default=5, type=int)
-	behavior_parser.add_argument('--stitch_gap', help='Number of frames in which frames sequential behavior prediction bouts will be joined, default=5', default=5, type=int)
-	behavior_parser.add_argument('--min_bout_length', help='Minimum number of frames in which a behavior prediction must be to be considered, default=5', default=5, type=int)
+	behavior_parser.add_argument('--interpolate_size', help=f'Maximum number of frames in which missing data will be interpolated, default={DEFAULT_INTERPOLATE}', default=DEFAULT_INTERPOLATE, type=int)
+	behavior_parser.add_argument('--stitch_gap', help=f'Number of frames in which frames sequential behavior prediction bouts will be joined, default={DEFAULT_STITCH}', default=DEFAULT_STITCH, type=int)
+	behavior_parser.add_argument('--min_bout_length', help=f'Minimum number of frames in which a behavior prediction must be to be considered, default={DEFAULT_MIN_BOUT}', default=DEFAULT_MIN_BOUT, type=int)
 
 	args = parser.parse_args()
 	behavior_args = []
