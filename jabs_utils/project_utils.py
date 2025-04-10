@@ -319,7 +319,7 @@ class Bouts:
 			fill_state: state to fill in padded events
 		"""
 		vector_data = self.to_vector(max_frames, fill_state, False)
-		vector_data = vector_data[:max_frames]
+		vector_data = vector_data[:int(max_frames)]
 		new_starts, new_durations, new_values = self.rle(vector_data)
 		self._starts = np.asarray(new_starts)
 		self._durations = np.asarray(new_durations)
@@ -344,9 +344,9 @@ class Bouts:
 		total_length = np.max(ends)
 		total_length = np.max([total_length, min_frames])
 
-		vector = np.full(total_length, fill_state)
+		vector = np.full(int(total_length), fill_state)
 		for start, end, state in zip(adjusted_starts, ends, self._values):
-			vector[start:end] = state
+			vector[int(start):int(end)] = state
 
 		return vector
 
@@ -999,7 +999,7 @@ class JabsProject:
 		self._experiments = experiments
 
 	@classmethod
-	def from_prediction_folder(cls, project_folder: Path, settings: ClassifierSettings, feature_folder: Path):
+	def from_prediction_folder(cls, project_folder: Path, settings: ClassifierSettings, feature_folder: Path = None):
 		"""Constructor based on a predction folder structure.
 
 		Args:
