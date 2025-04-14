@@ -17,6 +17,8 @@ From: python:3.10-slim-bullseye
 	# GUI
 	apt-get install -y qtbase5-dev libglu1-mesa-dev libgl1-mesa-glx libxcb-util1 libvtk6-dev
 	apt-get install -y git
+	# Nextflow performance logging
+	apt-get install -y procps
 
 	# Install all the python packages
 	pip install --upgrade pip
