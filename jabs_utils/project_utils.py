@@ -336,13 +336,21 @@ class Bouts:
 		Returns:
 			np.ndarray of the state vector.
 		"""
-		if shift_start:
+		if shift_start and self._starts.size > 0:
 			adjusted_starts = self._starts - np.min(self._starts)
 		else:
 			adjusted_starts = self._starts
 		ends = adjusted_starts + self._durations
-		total_length = np.max(ends)
-		total_length = np.max([total_length, min_frames])
+
+		# Determine the extent of actual events, if any
+		if adjusted_starts.size > 0:
+			max_event_end = np.max(ends)
+		else:
+			# If no events, the effective end is 0 (or start of timeline)
+			max_event_end = 0 
+
+		# Total length is the greater of the actual event extent or min_frames
+		total_length = np.max([max_event_end, min_frames])
 
 		vector = np.full(int(total_length), fill_state)
 		for start, end, state in zip(adjusted_starts, ends, self._values):
