@@ -93,6 +93,10 @@ def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan,
             continue
         pr_obj = Bouts(pr_df['start'], pr_df['duration'], pr_df['is_behavior'])
         gt_df = animal_df[animal_df['is_gt']]
+        # If there is no ground truth data for this animal/video, skip it.
+        if gt_df.empty:
+            warnings.warn(f'No ground truth data for {cur_animal} in {cur_video} for behavior {args.behavior}... skipping.')
+            continue
         gt_obj = Bouts(gt_df['start'], gt_df['duration'], gt_df['is_behavior'])
 
         full_duration = pr_obj.starts[-1] + pr_obj.durations[-1]
@@ -123,6 +127,11 @@ def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan,
                 for key, val in metrics.items():
                     new_performance[key] = [val]
                 performance_df.append(pd.DataFrame(new_performance))
+
+    if not performance_df:
+        warnings.warn(f"No valid ground truth and prediction pairs found for behavior {args.behavior} across all files. Cannot generate performance metrics.")
+        # Return an empty DataFrame with expected columns to prevent downstream errors
+        return pd.DataFrame(columns=['stitch', 'filter', 'threshold', 'tp', 'fn', 'fp', 'pr', 're', 'f1'])
 
     performance_df = pd.concat(performance_df)
     # Aggregate over animals
