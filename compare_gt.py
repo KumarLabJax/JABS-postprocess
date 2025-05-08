@@ -27,6 +27,8 @@ def evaluate_ground_truth(args):
     all_annotations = pd.concat([gt_df, pred_df])
     # We only want the positive examples
     all_annotations = all_annotations[all_annotations['is_behavior'] == 1]
+    if not all_annotations.empty:
+        all_annotations['behavior'] = args.behavior
     # TODO: Trim time?
     if args.trim_time is not None:
         warnings.warn('Time trimming is not currently supported, ignoring.')
@@ -68,6 +70,37 @@ def evaluate_ground_truth(args):
         + p9.geom_line()
         + p9.theme_bw()
     ).save(args.bout_output, height=6, width=12, dpi=300)
+
+    if args.ethogram_output is not None:
+        # Prepare data for ethogram plot
+        plot_df = all_annotations[all_annotations['behavior'] == args.behavior].copy()
+        if not plot_df.empty:
+            plot_df['end'] = plot_df['start'] + plot_df['duration']
+            factor_animal = pd.factorize(plot_df['animal_idx'])
+            plot_df['yax'] = factor_animal[0]
+
+            # combined column for faceting
+            plot_df['animal_video_combo'] = plot_df['animal_idx'].astype(str) + " | " + plot_df['video_name'].astype(str)
+            num_unique_combos = len(plot_df['animal_video_combo'].unique())
+
+            if num_unique_combos > 0: # make sure there is something to plot, otherwise skip
+                ethogram_plot = (
+                    p9.ggplot(plot_df) +
+                    p9.geom_rect(p9.aes(xmin='start', xmax='end', ymin='0.5 * is_gt', ymax='0.5 * is_gt + 0.4', fill='is_gt')) +
+                    p9.theme_bw() +
+                    p9.facet_wrap('~animal_video_combo', ncol=1, scales='free_x') + #row per each animal video combination
+                    p9.scale_y_continuous(breaks=[0.2, 0.7], labels=['Pred', 'GT'], name='') +
+                    p9.scale_fill_brewer(type='qual', palette='Set1', labels=['Prediction', 'Ground Truth']) +
+                    p9.labs(x='Frame', fill='Source', title=f'Ethogram for behavior: {args.behavior}') +
+                    p9.expand_limits(x=0)  # start x-axis at 0
+                )
+                # Adjust height based on the number of unique animal-video combinations
+                ethogram_plot.save(args.ethogram_output, height=1.5 * num_unique_combos + 2, width=12, dpi=300, verbose=False)
+                print(f"Ethogram plot saved to {args.ethogram_output}")
+            else:
+                warnings.warn(f"No data to plot for behavior {args.behavior} after filtering for ethogram.")
+        else:
+            warnings.warn(f"No annotations found for behavior {args.behavior} to generate ethogram plot.")
 
 
 def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan, filter_ground_truth: bool = False) -> pd.DataFrame:
@@ -158,12 +191,14 @@ def main(argv):
     parser.add_argument('--scan_output', help='Output file to save the filter scan performance plot.', default=None)
     parser.add_argument('--bout_output', help='Output file to save the resulting bout performance plot.', default=None)
     parser.add_argument('--trim_time', help='Limit the duration in frames of videos for performance (e.g. only the first 2 minutes of a 10 minute video were densely annotated).', default=None, type=int)
+    parser.add_argument('--ethogram_output', help='Output file to save the ethogram plot comparing GT and predictions.', default=None)
     args = parser.parse_args()
 
     assert os.path.exists(args.ground_truth_folder)
     assert os.path.exists(args.prediction_folder)
-    if args.scan_output is None and args.bout_output is None:
-        print('Neither scan or bout outputs were selected, nothing to do. Please use --scan_output or --bout_output.')
+    if args.scan_output is None and args.bout_output is None and args.ethogram_output is None:
+        print('Neither scan, bout, nor ethogram outputs were selected, nothing to do. Please use --scan_output, --bout_output, or --ethogram_output.')
+        return
 
     evaluate_ground_truth(args)
 
