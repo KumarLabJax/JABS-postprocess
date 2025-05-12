@@ -359,7 +359,7 @@ class Bouts:
 		return vector
 
 	def compare_to(self, other: Bouts, state: int = 1):
-		"""Compares these events to another list of events.
+		"""Compares these events to another list of events.	
 
 		Args:
 			other: other bout object
