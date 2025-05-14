@@ -95,12 +95,15 @@ def evaluate_ground_truth(args):
     middle_threshold = np.sort(args.iou_thresholds)[int(np.floor(len(args.iou_thresholds) / 2))]
     subset_df = performance_df[performance_df['threshold'] == middle_threshold]
 
+    # Convert f1 values to strings for labels to avoid type conversion issues
+    subset_df['f1_label'] = subset_df['f1'].apply(lambda x: f"{x:.2f}" if not pd.isna(x) else "NA")
+
     (
         p9.ggplot(subset_df)
         + p9.geom_tile(p9.aes(x='stitch', y='filter', fill='f1'))
-        + p9.geom_text(p9.aes(x='stitch', y='filter', label='np.round(f1, 2)'), color='black', size=2)
+        + p9.geom_text(p9.aes(x='stitch', y='filter', label='f1_label'), color='black', size=2)
         # Obtain the highest F1 score to highlight it
-        + p9.geom_point(pd.DataFrame(subset_df.iloc[np.argmax(subset_df['f1'])]).T, p9.aes(x='stitch', y='filter'), shape='*', size=3, fill='#ffffff00')
+        + p9.geom_point(pd.DataFrame(subset_df.iloc[np.argmax(subset_df['f1'])]).T, p9.aes(x='stitch', y='filter'), shape='*', size=3, color='white')
         + p9.theme_bw()
         + p9.labs(title=f'Performance at {middle_threshold} IoU')
     ).save(args.scan_output, height=6, width=12, dpi=300)
@@ -149,7 +152,7 @@ def evaluate_ground_truth(args):
                         p9.expand_limits(x=0)  # start x-axis at 0
                     )
                     # Adjust height based on the number of unique animal-video combinations
-                    ethogram_plot.save(args.ethogram_output, height=1.5 * num_unique_combos + 2, width=12, dpi=300, verbose=False)
+                    ethogram_plot.save(args.ethogram_output, height=1.5 * num_unique_combos + 2, width=12, dpi=300, limitsize=False, verbose=False)
                     print(f"Ethogram plot saved to {args.ethogram_output}")
                 else:
                     warnings.warn(f"No behavior instances found for behavior {args.behavior} after filtering for ethogram.")
