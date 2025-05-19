@@ -93,22 +93,51 @@ def evaluate_ground_truth(args):
     # )
 
     middle_threshold = np.sort(args.iou_thresholds)[int(np.floor(len(args.iou_thresholds) / 2))]
-    subset_df = performance_df[performance_df['threshold'] == middle_threshold]
-
-    # Convert f1 values to strings for labels to avoid type conversion issues
+    # Create a copy to avoid SettingWithCopyWarning
+    subset_df = performance_df[performance_df['threshold'] == middle_threshold].copy()
+    
+    # Convert numeric columns to float to ensure continuous scale
+    subset_df['stitch'] = subset_df['stitch'].astype(float)
+    subset_df['filter'] = subset_df['filter'].astype(float)
+    
+    # Handle NaN values in f1 by replacing with 0 for plotting purposes
+    subset_df['f1_plot'] = subset_df['f1'].fillna(0)
+    
+    # Convert f1 values to strings for labels
     subset_df['f1_label'] = subset_df['f1'].apply(lambda x: f"{x:.2f}" if not pd.isna(x) else "NA")
-
-    (
+    
+    # Create the plot with explicit scale types and proper handling of NaN values
+    plot = (
         p9.ggplot(subset_df)
-        + p9.geom_tile(p9.aes(x='stitch', y='filter', fill='f1'))
+        + p9.geom_tile(p9.aes(x='stitch', y='filter', fill='f1_plot'))
         + p9.geom_text(p9.aes(x='stitch', y='filter', label='f1_label'), color='black', size=2)
-        # Obtain the highest F1 score to highlight it
-        + p9.geom_point(pd.DataFrame(subset_df.iloc[np.argmax(subset_df['f1'])]).T, p9.aes(x='stitch', y='filter'), shape='*', size=3, color='white')
         + p9.theme_bw()
         + p9.labs(title=f'Performance at {middle_threshold} IoU')
-    ).save(args.scan_output, height=6, width=12, dpi=300)
+    )
 
-    winning_filters = pd.DataFrame(subset_df.iloc[np.argmax(subset_df['f1'])]).T.reset_index(drop=True)[['stitch', 'filter']]
+    # Add the star point only if we have valid f1 scores
+    if not subset_df['f1_plot'].isna().all():
+        best_idx = np.argmax(subset_df['f1_plot'])
+        best_point = pd.DataFrame(subset_df.iloc[best_idx:best_idx+1])
+        plot = plot + p9.geom_point(best_point, p9.aes(x='stitch', y='filter'), shape='*', size=3, color='white')
+
+    # Add scales with explicit breaks
+    plot = (
+        plot
+        + p9.scale_x_continuous(
+            breaks=sorted(subset_df['stitch'].unique()),
+            labels=[str(int(x)) for x in sorted(subset_df['stitch'].unique())]
+        )
+        + p9.scale_y_continuous(
+            breaks=sorted(subset_df['filter'].unique()),
+            labels=[str(int(x)) for x in sorted(subset_df['filter'].unique())]
+        )
+        + p9.scale_fill_continuous(na_value=0)
+    )
+
+    plot.save(args.scan_output, height=6, width=12, dpi=300)
+
+    winning_filters = pd.DataFrame(subset_df.iloc[np.argmax(subset_df['f1_plot'])]).T.reset_index(drop=True)[['stitch', 'filter']]
 
     melted_winning = pd.concat([melted_df[(melted_df[['stitch', 'filter']] == row).all(axis='columns')] for _, row in winning_filters.iterrows()])
 
