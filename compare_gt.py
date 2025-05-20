@@ -93,6 +93,7 @@ def evaluate_ground_truth(args):
     # )
 
     middle_threshold = np.sort(args.iou_thresholds)[int(np.floor(len(args.iou_thresholds) / 2))]
+    
     # Create a copy to avoid SettingWithCopyWarning
     subset_df = performance_df[performance_df['threshold'] == middle_threshold].copy()
     
@@ -246,7 +247,7 @@ def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan,
                 performance_df.append(pd.DataFrame(new_performance))
 
     if not performance_df:
-        warnings.warn(f"No valid ground truth and prediction pairs found for behavior {args.behavior} across all files. Cannot generate performance metrics.")
+        warnings.warn(f"No valid ground truth and prediction pairs found for behavior across all files. Cannot generate performance metrics.")
         # Return an empty DataFrame with expected columns to prevent downstream errors
         return pd.DataFrame(columns=['stitch', 'filter', 'threshold', 'tp', 'fn', 'fp', 'pr', 're', 'f1'])
 
