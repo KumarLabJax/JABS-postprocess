@@ -3,7 +3,7 @@ name = "jabs-postprocess"
 version = "0.1.0"
 description = "A python library for JABS postprocessing utilities."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "black>=23.9.1",
     "h5py>=3.13.0",

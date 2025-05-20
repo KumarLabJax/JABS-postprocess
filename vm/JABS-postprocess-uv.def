@@ -1,0 +1,55 @@
+Bootstrap: docker
+From: ghcr.io/astral-sh/uv:python3.10-bookworm-slim
+
+%setup
+	mkdir -p ${SINGULARITY_ROOTFS}/JABS-postprocess
+
+%files
+	# Copy all necessary code and configuration files
+	./analysis_utils/ /JABS-postprocess/
+	./heuristic_classifiers/ /JABS-postprocess/
+	./jabs_utils/ /JABS-postprocess/
+	./*.py /JABS-postprocess/
+	./pyproject.toml /JABS-postprocess/
+	./uv.lock /JABS-postprocess/
+	./vm/runscript.sh /JABS-postprocess/
+	./vm/README.md /JABS-postprocess/
+
+%post
+	# Install all required system dependencies in a single command to reduce layers
+	apt-get update && apt-get install -y --no-install-recommends \
+		ffmpeg \
+		python3-tk \
+		coreutils \
+		libsm6 \
+		qtbase5-dev \
+		libglu1-mesa-dev \
+		libgl1-mesa-glx \
+		libxcb-util1 \
+		libvtk9-dev \
+		git \
+		procps && \
+	apt-get clean && \
+	rm -rf /var/lib/apt/lists/*
+
+	# Install all Python packages
+	cd /JABS-postprocess && uv sync --locked --compile-bytecode --no-editable
+
+%environment
+	export PATH="/JABS-postprocess/.venv/bin:$PATH"
+
+%runscript
+	/bin/bash /JABS-postprocess/vm/runscript.sh "$@"
+
+%help
+	This container provides tools for JABS post-processing.
+	
+	Usage:
+	  $ singularity run JABS-Postprocessing.sif [arguments]
+	
+	See README.md for more detailed usage instructions.
+
+%labels
+	Author "The Kumar Lab"
+	Version "0.1.0"
+	Description "JABS post-processing container with Python 3.10"

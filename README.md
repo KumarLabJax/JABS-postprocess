@@ -11,7 +11,23 @@ cd vm
 singularity build --fakeroot ../../JABS-Postprocessing.sif JABS-postprocess.def
 ```
 
+### `uv` Based Image
+The `uv` based singularity image should be built from the repository root.
+```
+singularity build JABS-postprocess-uv.sif vm/JABS-postprocess-uv.def
+```
+
 ## Virtual Environment
+
+This project uses [`uv`](https://docs.astral.sh/uv/) for managing dependencies. You can use it to set up your virutal environment.
+
+From the root of the repository, run:
+```
+uv sync
+```
+
+### Pip Based Virtual Environment
+If you must use pip, you can create a virtual environment by running:
 
 ```python3 -m venv postprocess_venv
 source postprocess_venv/bin/activate
@@ -24,8 +40,14 @@ Only python3.10 has been tested.
 
 ## Classifier-based Table Generation
 
+**Note**: When using a uv based environment, add `uv run` before each python command.
+
 ```
-python3 generate_behavior_tables.py --project_folder /path/to/project/folder/ --out_prefix results --behavior Behavior_1 --behavior Behavior_2
+python3 generate_behavior_tables.py \
+    --project_folder /path/to/project/folder/ \
+    --out_prefix results \
+    --behavior Behavior_1 \
+    --behavior Behavior_2
 ```
 
 This will generate 2 behavior table files per behavior detected in the project folder. You must include `--behavior BehaviorName` to generate a behavior table for each behavior. If you are unsure which behavior are available in a given project folder, you can check by intentionally guessing incorrectly.
