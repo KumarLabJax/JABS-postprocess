@@ -13,7 +13,7 @@ From: ghcr.io/astral-sh/uv:python3.10-bookworm-slim
 	./pyproject.toml /JABS-postprocess/
 	./uv.lock /JABS-postprocess/
 	./vm/runscript.sh /JABS-postprocess/
-	./vm/README.md /JABS-postprocess/
+	./README.md /JABS-postprocess/
 
 %post
 	# Install all required system dependencies in a single command to reduce layers
