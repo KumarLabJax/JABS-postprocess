@@ -938,7 +938,7 @@ class Prediction(BoutTable):
 		"""
 		with h5py.File(str(source_file), 'r') as in_f:
 			if settings.behavior not in in_f['predictions/'].keys():
-				available_keys = in_f['predictions'].keys()
+				available_keys = list(in_f['predictions'].keys())
 				if len(available_keys) > 0:
 					behavior_pred_shape = in_f[f'predictions/{available_keys[0]}/predicted_class'].shape
 					return Prediction.generate_default_bouts(behavior_pred_shape[0], behavior_pred_shape[1])
@@ -959,6 +959,11 @@ class Prediction(BoutTable):
 			})
 			bout_dfs.append(new_df)
 
+		# Handle empty bout_dfs list to avoid "No objects to concatenate" error
+		if not bout_dfs:
+			# Return empty DataFrame with expected columns
+			return pd.DataFrame(columns=['animal_idx', 'start', 'duration', 'is_behavior'])
+		
 		bout_dfs = pd.concat(bout_dfs)
 		return bout_dfs
 
@@ -974,6 +979,10 @@ class Prediction(BoutTable):
 			BoutTable containing 1 bout of no prediction for the entire prediction size.
 		"""
 		bout_dfs = []
+		# Handle the case where num_animals is 0
+		if num_animals <= 0:
+			return pd.DataFrame(columns=['animal_idx', 'start', 'duration', 'is_behavior'])
+		
 		for idx in np.arange(num_animals):
 			default_df = pd.DataFrame({
 				'animal_idx': [idx],
@@ -1323,18 +1332,20 @@ class Experiment:
 		Args:
 			predictions: list of files to detect behaviors
 
+		Returns:
+			List of behavior names found in the prediction files
 		"""
-		behavior_list = []
+		behavior_list = set()
 		for cur_prediction_file in predictions:
 			try:
 				with h5py.File(cur_prediction_file, 'r') as f:
 					new_behaviors = list(f['predictions'].keys())
-					behavior_list = set(list(behavior_list) + new_behaviors)
+					behavior_list.update(new_behaviors)
 			# Ignore when a file doesn't exist or 'predictions' aren't present
 			except (FileNotFoundError, KeyError):
 				pass
 
-		return behavior_list
+		return list(behavior_list)
 
 	@staticmethod
 	def get_pose_version(pose_file: Path):
@@ -1473,8 +1484,11 @@ class Experiment:
 			cur_fragment = Fragment(new_tracklets)
 
 		for cur_prediction in self._predictions:
-			id_assignments = self._id_dict.get(cur_prediction.data.iloc[0]['video_name'], {})
-			cur_prediction.add_id_field(id_assignments)
+			# Check if the DataFrame is empty before trying to access iloc[0]
+			if len(cur_prediction.data) > 0:
+				id_assignments = self._id_dict.get(cur_prediction.data.iloc[0]['video_name'], {})
+				cur_prediction.add_id_field(id_assignments)
+			# For empty DataFrames, we don't need to assign IDs
 
 	def _sort_predictions(self):
 		"""Sorts the predictions by their time components.
@@ -1482,8 +1496,17 @@ class Experiment:
 		Todo:
 			Here is probably a good place to check for missing data, rather than relying on other checks.
 		"""
-		prediction_times = np.asarray([x.data.iloc[0]['time'] for x in self._predictions])
+		# Filter out predictions with empty data
+		valid_predictions = [x for x in self._predictions if len(x.data) > 0]
+		if not valid_predictions:
+			# Nothing to sort if all are empty
+			return
+			
+		prediction_times = np.asarray([x.data.iloc[0]['time'] for x in valid_predictions])
 		# Since the time format is Y-M-D_H-M-S, it's as simple as argsort!
 		sort_order = np.argsort(prediction_times)
-		self._pose_files = np.asarray(self._pose_files)[sort_order].tolist()
-		self._predictions = np.asarray(self._predictions)[sort_order].tolist()
+		
+		# Only sort predictions that have data
+		valid_pose_files = [self._pose_files[i] for i, pred in enumerate(self._predictions) if len(pred.data) > 0]
+		self._pose_files = np.asarray(valid_pose_files)[sort_order].tolist()
+		self._predictions = np.asarray(valid_predictions)[sort_order].tolist()
