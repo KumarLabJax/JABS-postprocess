@@ -30,7 +30,7 @@ From: ghcr.io/astral-sh/uv:python3.10-bookworm-slim
 	rm -rf /var/lib/apt/lists/*
 
 	# Install all Python packages
-	cd /JABS-postprocess && uv sync --locked --compile-bytecode --no-editable && uv run jabs-postprocess --install-completion
+	cd /opt/JABS-postprocess && uv sync --locked --compile-bytecode --no-editable && uv run jabs-postprocess --install-completion
 
 %environment
 	export PATH="/opt/JABS-postprocess/.venv/bin:$PATH"
