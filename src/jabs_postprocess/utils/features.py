@@ -3,7 +3,7 @@ import h5py
 import numpy as np
 import pandas as pd
 import os
-from jabs_utils.metadata import VideoMetadata
+from jabs_postprocess.utils.metadata import VideoMetadata
 
 class JABSFeature:
 	"""Methods to interact with JABS feature data."""

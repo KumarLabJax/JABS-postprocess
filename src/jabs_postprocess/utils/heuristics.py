@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Union, List
-from jabs_utils.features import JABSFeature
+from jabs_postprocess.utils.features import JABSFeature
 import numpy as np
 
 

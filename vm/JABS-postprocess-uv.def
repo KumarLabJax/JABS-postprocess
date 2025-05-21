@@ -2,18 +2,15 @@ Bootstrap: docker
 From: ghcr.io/astral-sh/uv:python3.10-bookworm-slim
 
 %setup
-	mkdir -p ${SINGULARITY_ROOTFS}/JABS-postprocess
+	mkdir -p ${SINGULARITY_ROOTFS}/opt/JABS-postprocess
 
 %files
 	# Copy all necessary code and configuration files
-	./analysis_utils/ /JABS-postprocess/
-	./heuristic_classifiers/ /JABS-postprocess/
-	./jabs_utils/ /JABS-postprocess/
-	./*.py /JABS-postprocess/
-	./pyproject.toml /JABS-postprocess/
-	./uv.lock /JABS-postprocess/
-	./vm/runscript.sh /JABS-postprocess/
-	./README.md /JABS-postprocess/
+	./src/ /opt/JABS-postprocess/
+	./pyproject.toml /opt/JABS-postprocess/
+	./uv.lock /opt/JABS-postprocess/
+	./vm/runscript.sh /opt/JABS-postprocess/
+	./README.md /opt/JABS-postprocess/
 
 %post
 	# Install all required system dependencies in a single command to reduce layers
@@ -33,13 +30,13 @@ From: ghcr.io/astral-sh/uv:python3.10-bookworm-slim
 	rm -rf /var/lib/apt/lists/*
 
 	# Install all Python packages
-	cd /JABS-postprocess && uv sync --locked --compile-bytecode --no-editable
+	cd /JABS-postprocess && uv sync --locked --compile-bytecode --no-editable && uv run jabs-postprocess --install-completion
 
 %environment
-	export PATH="/JABS-postprocess/.venv/bin:$PATH"
+	export PATH="/opt/JABS-postprocess/.venv/bin:$PATH"
 
 %runscript
-	/bin/bash /JABS-postprocess/vm/runscript.sh "$@"
+	/bin/bash /opt/JABS-postprocess/runscript.sh "$@"
 
 %help
 	This container provides tools for JABS post-processing.

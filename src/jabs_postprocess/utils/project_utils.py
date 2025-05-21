@@ -11,10 +11,10 @@ from typing import List, Union
 from copy import deepcopy
 import yaml
 
-from jabs_utils.identity import VideoTracklet, Fragment
-from jabs_utils.heuristics import Relation
-from jabs_utils.features import JABSFeature
-from jabs_utils.metadata import VideoMetadata, ClassifierSettings, FeatureSettings, PREDICTION_REGEX_STR, FEATURE_REGEX_STR, POSE_REGEX_STR
+from jabs_postprocess.utils.identity import VideoTracklet, Fragment
+from jabs_postprocess.utils.heuristics import Relation
+from jabs_postprocess.utils.features import JABSFeature
+from jabs_postprocess.utils.metadata import VideoMetadata, ClassifierSettings, FeatureSettings, PREDICTION_REGEX_STR, FEATURE_REGEX_STR, POSE_REGEX_STR
 
 BEHAVIOR_CLASSIFY_VERSION = 1
 
