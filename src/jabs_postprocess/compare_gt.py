@@ -1,15 +1,18 @@
 """Associated lines of code that deal with the comparison of predictions (from classify.py) and GT annotation (from a JABS project)."""
 
+import warnings
+from typing import List, Optional
+
+import numpy as np
 import pandas as pd
 import plotnine as p9
-import os
-import sys
-import numpy as np
-import argparse
-import warnings
-from typing import List, Optional, Union
 
-from jabs_postprocess.utils.project_utils import BoutTable, JabsProject, ClassifierSettings, Bouts
+from jabs_postprocess.utils.project_utils import (
+    Bouts,
+    BoutTable,
+    ClassifierSettings,
+    JabsProject,
+)
 
 
 def evaluate_ground_truth(
@@ -122,12 +125,9 @@ def evaluate_ground_truth(
     #     + p9.theme_bw()
     # )
 
-<<<<<<< HEAD:src/jabs_postprocess/compare_gt.py
     middle_threshold = np.sort(iou_thresholds)[int(np.floor(len(iou_thresholds) / 2))]
-=======
-    middle_threshold = np.sort(args.iou_thresholds)[int(np.floor(len(args.iou_thresholds) / 2))]
-    
->>>>>>> origin/master:compare_gt.py
+
+
     # Create a copy to avoid SettingWithCopyWarning
     subset_df = performance_df[performance_df['threshold'] == middle_threshold].copy()
     
