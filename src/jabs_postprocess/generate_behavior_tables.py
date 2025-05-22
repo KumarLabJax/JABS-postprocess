@@ -1,11 +1,9 @@
 """Generates behavior tables from JABS predictions."""
 
-import pandas as pd
-import numpy as np
-from typing import List, Dict, Optional, Union, Tuple
+from typing import Dict, List, Optional, Tuple
 
-from jabs_postprocess.utils.project_utils import JabsProject, ClassifierSettings
-from jabs_postprocess.utils.metadata import DEFAULT_INTERPOLATE, DEFAULT_STITCH, DEFAULT_MIN_BOUT
+
+from jabs_postprocess.utils.project_utils import ClassifierSettings, JabsProject
 
 
 def process_behavior_tables(

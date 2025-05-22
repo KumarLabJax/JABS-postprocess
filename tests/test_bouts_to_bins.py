@@ -12,13 +12,11 @@ into time-binned summary statistics. The tests verify:
 The transform_bouts_to_bins function is a core data processing utility that aggregates 
 fine-grained behavioral data into time-windowed summaries for further analysis.
 """
-import os
-import re
 from pathlib import Path
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import MagicMock, patch
 
-import pytest
 import pandas as pd
+import pytest
 
 from jabs_postprocess.bouts_to_bins import transform_bouts_to_bins
 from jabs_postprocess.utils.project_utils import BoutTable

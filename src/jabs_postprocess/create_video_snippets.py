@@ -1,13 +1,19 @@
 """Utilities for creating video snippets from JABS recordings."""
 
-import numpy as np
-import h5py
 import argparse
-import sys
 import os
+import sys
 from pathlib import Path
-from jabs_postprocess.analysis_utils.clip_utils import write_video_clip, write_pose_clip, read_pose_file
-from typing import Union, Optional, List, Tuple, Literal
+from typing import Optional, Union
+
+import h5py
+import numpy as np
+
+from jabs_postprocess.analysis_utils.clip_utils import (
+	read_pose_file,
+	write_pose_clip,
+	write_video_clip,
+)
 
 
 def get_time_in_frames(location: Union[float, int], unit: str, fps: int = 30) -> int:

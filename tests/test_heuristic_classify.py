@@ -11,16 +11,11 @@ The tests cover various parameter combinations, backward compatibility,
 and verify that the function correctly interacts with the underlying
 JABS components (FeatureSettings, JabsProject, etc.).
 """
-import sys
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from jabs_postprocess.heuristic_classify import process_heuristic_classification
-from jabs_postprocess.utils.metadata import (
-    DEFAULT_INTERPOLATE,
-    DEFAULT_STITCH,
-    DEFAULT_MIN_BOUT
-)
 
 
 @pytest.fixture

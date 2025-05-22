@@ -1,6 +1,3 @@
-import sys
-import re
-import argparse
 from pathlib import Path
 
 from jabs_postprocess.utils.project_utils import BoutTable

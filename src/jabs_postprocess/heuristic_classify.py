@@ -1,9 +1,6 @@
-import sys
-import argparse
 from typing import Optional
 
 from jabs_postprocess.utils.project_utils import FeatureSettings, JabsProject
-from jabs_postprocess.utils.metadata import DEFAULT_INTERPOLATE, DEFAULT_STITCH, DEFAULT_MIN_BOUT
 
 
 def process_heuristic_classification(

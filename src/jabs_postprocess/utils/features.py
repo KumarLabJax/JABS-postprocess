@@ -1,9 +1,12 @@
+import os
 from pathlib import Path
+
 import h5py
 import numpy as np
 import pandas as pd
-import os
+
 from jabs_postprocess.utils.metadata import VideoMetadata
+
 
 class JABSFeature:
 	"""Methods to interact with JABS feature data."""

@@ -1,20 +1,29 @@
 from __future__ import annotations
-import h5py
+
 import json
-import pandas as pd
-import numpy as np
-import re
 import os
-from pathlib import Path
-from datetime import datetime
-from typing import List, Union
+import re
 from copy import deepcopy
+from datetime import datetime
+from pathlib import Path
+from typing import List, Union
+
+import h5py
+import numpy as np
+import pandas as pd
 import yaml
 
-from jabs_postprocess.utils.identity import VideoTracklet, Fragment
-from jabs_postprocess.utils.heuristics import Relation
 from jabs_postprocess.utils.features import JABSFeature
-from jabs_postprocess.utils.metadata import VideoMetadata, ClassifierSettings, FeatureSettings, PREDICTION_REGEX_STR, FEATURE_REGEX_STR, POSE_REGEX_STR
+from jabs_postprocess.utils.heuristics import Relation
+from jabs_postprocess.utils.identity import Fragment, VideoTracklet
+from jabs_postprocess.utils.metadata import (
+	FEATURE_REGEX_STR,
+	POSE_REGEX_STR,
+	PREDICTION_REGEX_STR,
+	ClassifierSettings,
+	FeatureSettings,
+	VideoMetadata,
+)
 
 BEHAVIOR_CLASSIFY_VERSION = 1
 

@@ -29,6 +29,7 @@ import pytest
 # Adjust the import path if your project structure is different
 from jabs_postprocess.utils.project_utils import Bouts
 
+
 def test_bouts_to_vector_empty_bouts_uses_min_frames():
     """
     Tests Bouts.to_vector when the Bouts object has no initial events.

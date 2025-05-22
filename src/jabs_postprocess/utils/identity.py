@@ -1,9 +1,10 @@
 from __future__ import annotations
+
+from itertools import chain
+from typing import List, Union
+
 import numpy as np
 import scipy
-from itertools import chain
-
-from typing import List, Union
 
 
 class VideoTracklet():

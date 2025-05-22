@@ -1,18 +1,22 @@
-import typer
-import numpy as np
-from typing import List, Optional, Annotated, Dict
-from pathlib import Path
 from enum import Enum
+from pathlib import Path
+from typing import Annotated, List, Optional
+
+import numpy as np
+import typer
 
 from jabs_postprocess import (
     bouts_to_bins,
     compare_gt,
-    heuristic_classify,
-    generate_behavior_tables,
     create_video_snippets,
+    generate_behavior_tables,
+    heuristic_classify,
 )
-from jabs_postprocess.utils.metadata import DEFAULT_INTERPOLATE, DEFAULT_STITCH, DEFAULT_MIN_BOUT
-
+from jabs_postprocess.utils.metadata import (
+    DEFAULT_INTERPOLATE,
+    DEFAULT_MIN_BOUT,
+    DEFAULT_STITCH,
+)
 
 app = typer.Typer()
 
@@ -196,9 +200,9 @@ def heuristic_classify(
     out_prefix: Annotated[str, typer.Option(help="File prefix to write output tables (prefix_bouts.csv and prefix_summaries.csv)")] = "behavior",
     out_bin_size: Annotated[int, typer.Option(help="Time duration used in binning the results")] = 60,
     overwrite: Annotated[bool, typer.Option(help="Overwrites output files")] = False,
-    interpolate_size: Annotated[Optional[int], typer.Option(help=f"Maximum number of frames in which missing data will be interpolated (default: {heuristic_classify.DEFAULT_INTERPOLATE})")] = None,
-    stitch_gap: Annotated[Optional[int], typer.Option(help=f"Number of frames in which frames sequential behavior prediction bouts will be joined (default: {heuristic_classify.DEFAULT_STITCH})")] = None,
-    min_bout_length: Annotated[Optional[int], typer.Option(help=f"Minimum number of frames in which a behavior prediction must be to be considered (default: {heuristic_classify.DEFAULT_MIN_BOUT})")] = None,
+    interpolate_size: Annotated[Optional[int], typer.Option(help=f"Maximum number of frames in which missing data will be interpolated (default: {DEFAULT_INTERPOLATE})")] = None,
+    stitch_gap: Annotated[Optional[int], typer.Option(help=f"Number of frames in which frames sequential behavior prediction bouts will be joined (default: {DEFAULT_STITCH})")] = None,
+    min_bout_length: Annotated[Optional[int], typer.Option(help=f"Minimum number of frames in which a behavior prediction must be to be considered (default: {DEFAULT_MIN_BOUT})")] = None,
 ) -> None:
     """Process heuristic classification for behavior analysis."""
     heuristic_classify.process_heuristic_classification(

@@ -27,15 +27,16 @@ The tests use extensive mocking to isolate functionality and parametrization to
 test multiple scenarios efficiently. Fixtures are provided for common test data
 like mock bout tables, JABS projects, and annotation samples.
 """
-import os
-import pandas as pd
+from unittest.mock import MagicMock, patch
+
 import numpy as np
+import pandas as pd
 import pytest
-from unittest.mock import patch, MagicMock
-import warnings
 
 from jabs_postprocess.compare_gt import evaluate_ground_truth, generate_iou_scan
-from jabs_postprocess.utils.project_utils import BoutTable, JabsProject, ClassifierSettings, Bouts
+from jabs_postprocess.utils.project_utils import (
+    Bouts,
+)
 
 
 @pytest.fixture

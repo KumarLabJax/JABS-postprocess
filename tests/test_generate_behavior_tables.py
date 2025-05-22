@@ -13,18 +13,14 @@ The tests use mocking extensively to isolate the code under test from external
 dependencies and validate proper interaction between components.
 """
 
-import os
-from unittest.mock import patch, MagicMock, call
-import pytest
+from unittest.mock import MagicMock, patch
 
-import pandas as pd
-import numpy as np
+import pytest
 
 from jabs_postprocess.generate_behavior_tables import (
     process_behavior_tables,
-    process_multiple_behaviors
+    process_multiple_behaviors,
 )
-from jabs_postprocess.utils.project_utils import JabsProject, ClassifierSettings
 
 
 @pytest.fixture
