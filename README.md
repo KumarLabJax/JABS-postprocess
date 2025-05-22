@@ -11,6 +11,18 @@ cd vm
 singularity build --fakeroot ../../JABS-Postprocessing.sif JABS-postprocess.def
 ```
 
+### Running Commands in Singularity
+When using the Singularity container, you can run commands directly using the `jabs-postprocess` command since the environment is set up with the script on your path:
+
+```
+singularity run JABS-Postprocessing.sif jabs-postprocess COMMAND [OPTIONS]
+```
+
+For example:
+```
+singularity run JABS-Postprocessing.sif jabs-postprocess generate-tables --help
+```
+
 ### `uv` Based Image
 The `uv` based singularity image should be built from the repository root.
 ```
@@ -40,10 +52,10 @@ Only python3.10 has been tested.
 
 ## Classifier-based Table Generation
 
-**Note**: When using a uv based environment, add `uv run` before each python command.
+**Note**: When using a uv based environment, use the `jabs-postprocess` command:
 
 ```
-python3 generate_behavior_tables.py \
+uv run jabs-postprocess generate-tables \
     --project_folder /path/to/project/folder/ \
     --out_prefix results \
     --behavior Behavior_1 \
@@ -55,20 +67,26 @@ This will generate 2 behavior table files per behavior detected in the project f
 To see all options with a short description, run:
 
 ```
-python3 generate_behavior_tables.py --help
+uv run jabs-postprocess generate-tables --help
 ```
 
 ## JABS-feature-based Table Generation
 
 ```
-python3 heuristic_classify.py --behavior Heuristic_Behavior --project_folder /path/to/project/folder/ --feature_folder /path/to/project/features/ --feature_key 'BASE_NECK speed' --relation '<' --threshold '1'
+uv run jabs-postprocess heuristic-classify \
+    --behavior Heuristic_Behavior \
+    --project_folder /path/to/project/folder/ \
+    --feature_folder /path/to/project/features/ \
+    --feature_key 'BASE_NECK speed' \
+    --relation '<' \
+    --threshold '1'
 ```
 
 This will generate 2 behavior table files based on the threshold applied to the feature. Additional `--feature_key <key> --relation <relation> --threshold <threshold>` can be used in succession to indicate all conditions at the same time (e.g. `feature_1 < threshold_1 AND feature_2 > threshold_2`).
 
 To see all options with a short description, run:
 ```
-python3 heuristic_classify.py --help
+uv run jabs-postprocess heuristic-classify --help
 ```
 
 ## Notes on Filtering
@@ -154,12 +172,24 @@ Additionally, there are a variety of helper functions located in [analysis_utils
 
 # Dense Ground Truth Performance Scripts
 
-These scripts are still in the prototyping phase, but example methods of comparing predictions with a JABS annotated set of videos are available in [compare_gt.py](compare_gt.py)
+These scripts are still in the prototyping phase, but example methods of comparing predictions with a JABS annotated set of videos are available using:
+
+```
+uv run jabs-postprocess compare-gt --help
+```
 
 # Video Clip Extraction
 
-[create_video_snippets.py](create_video_snippets.py) will create video snippets based on an input video. Optionally, can render behavior predictions (either globally or per-mouse).
+To create video snippets based on an input video (optionally rendering behavior predictions):
 
-[sample_uncertain_vids.py](sample_uncertain_vids.py) utilizes a project folder and predictions. This script requires the complete project used by JABS alongside the predictions generated.
+```
+uv run jabs-postprocess create-snippets --help
+```
 
-For both of these scripts, check the `--help` function for available filters.
+To sample uncertain videos from a project folder:
+
+```
+uv run jabs-postprocess sample-uncertain --help
+```
+
+For both of these commands, check the `--help` function for available filters.
