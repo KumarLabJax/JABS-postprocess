@@ -74,12 +74,9 @@ uv run jabs-postprocess generate-tables --help
 
 ```
 uv run jabs-postprocess heuristic-classify \
-    --behavior Heuristic_Behavior \
+    --behavior_config src/heuristic_classifiers/feeze.yaml \`
     --project_folder /path/to/project/folder/ \
-    --feature_folder /path/to/project/features/ \
-    --feature_key 'BASE_NECK speed' \
-    --relation '<' \
-    --threshold '1'
+    --feature_folder /path/to/project/features/
 ```
 
 This will generate 2 behavior table files based on the threshold applied to the feature. Additional `--feature_key <key> --relation <relation> --threshold <threshold>` can be used in succession to indicate all conditions at the same time (e.g. `feature_1 < threshold_1 AND feature_2 > threshold_2`).
