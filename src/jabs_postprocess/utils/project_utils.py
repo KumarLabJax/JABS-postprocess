@@ -1025,7 +1025,7 @@ class JabsProject:
 		self._experiments = experiments
 
 	@classmethod
-	def from_prediction_folder(cls, project_folder: Path, settings: ClassifierSettings, feature_folder: Path = None):
+	def from_prediction_folder(cls, project_folder: Path, settings: ClassifierSettings, feature_folder: Path | None = None):
 		"""Constructor based on a predction folder structure.
 
 		Args:

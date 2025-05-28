@@ -187,7 +187,7 @@ def generate_tables(
         overwrite=overwrite
     )
     
-    for behavior_name, (bout_file, summary_file) in zip(behavior, results):
+    for behavior_name, (bout_file, summary_file) in zip(behavior, results, strict=True):
         typer.echo(f"Generated tables for {behavior_name}:")
         typer.echo(f"  Bout table: {bout_file}")
         typer.echo(f"  Summary table: {summary_file}")

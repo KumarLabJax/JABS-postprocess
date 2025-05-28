@@ -2,16 +2,16 @@
 
 from typing import Dict, List, Optional, Tuple
 
-
+from pathlib import Path
 from jabs_postprocess.utils.project_utils import ClassifierSettings, JabsProject
 
 
 def process_behavior_tables(
-	project_folder: str,
+	project_folder: Path,
 	behavior: str,
 	out_prefix: str = 'behavior',
 	out_bin_size: int = 60,
-	feature_folder: Optional[str] = None,
+	feature_folder: Optional[Path] = None,
 	interpolate_size: Optional[int] = None,
 	stitch_gap: Optional[int] = None,
 	min_bout_length: Optional[int] = None,
@@ -54,11 +54,11 @@ def process_behavior_tables(
 
 
 def process_multiple_behaviors(
-	project_folder: str,
+	project_folder: Path,
 	behaviors: List[Dict],
 	out_prefix: str = 'behavior',
 	out_bin_size: int = 60,
-	feature_folder: Optional[str] = None,
+	feature_folder: Optional[Path] = None,
 	overwrite: bool = False
 ) -> List[Tuple[str, str]]:
 	"""Process multiple behaviors with different settings.
