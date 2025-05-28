@@ -72,6 +72,7 @@ def create_video_snippet(
 		
 	Raises:
 		FileNotFoundError: If input video doesn't exist
+		FileNotFoundError: If behavior_file is not None and it doesn't exist.
 		FileExistsError: If output video exists and overwrite is False
 	"""
 	# Convert Path objects to strings
