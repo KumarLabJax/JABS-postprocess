@@ -1,6 +1,5 @@
 """Utilities for creating video snippets from JABS recordings."""
 
-import argparse
 import os
 import sys
 from pathlib import Path
@@ -132,43 +131,3 @@ def create_video_snippet(
 		write_pose_clip(pose_file, out_pose, frame_range)
 		
 	return frame_range
-
-
-def main(argv):
-	"""Command line interface for video snippet creation."""
-	parser = argparse.ArgumentParser(description='Clips the video with optional behavior rendering')
-	parser.add_argument('--input_video', help='Path to input video for clipping', required=True)
-	parser.add_argument('--output_video', help='Path to output clipped video', required=True)
-	parser.add_argument('--start', help='Start time of the clip to produce (default beginning of video)', default=0, type=float)
-	g1 = parser.add_mutually_exclusive_group()
-	g1.add_argument('--end', help='End time of the clip to produce (default full video)', type=float)
-	g1.add_argument('--duration', help='Duration of the clip to produce', type=float)
-	parser.set_defaults(end=-1)
-	parser.add_argument('--time_units', help='Units used when clipping (default second)', choices=['frame', 'frames', 'f', 'second', 'seconds', 's', 'minute', 'minutes', 'm', 'hour', 'hours', 'h'], default='s', type=str)
-	parser.add_argument('--pose_file', help='Optional path to input pose file. Required to clip pose and render pose.', default=None)
-	parser.add_argument('--out_pose', help='Write the clipped pose file as well.', default=None)
-	parser.add_argument('--render_pose', help='Render the pose on the video clip.', default=False, action='store_true')
-	parser.add_argument('--behavior_file', help='Optional path to behavior predictions. If provided, will render predictions on the video.', default=None)
-	parser.add_argument('--overwrite', '-o', help='Overwrite the output video if it already exists', default=False, action='store_true')
-	args = parser.parse_args()
-
-	# Process end time appropriately for the function call
-	end = None if args.end == -1 else args.end
-
-	create_video_snippet(
-		input_video=args.input_video,
-		output_video=args.output_video,
-		start=args.start,
-		end=end,
-		duration=args.duration,
-		time_units=args.time_units,
-		pose_file=args.pose_file,
-		out_pose=args.out_pose,
-		render_pose=args.render_pose,
-		behavior_file=args.behavior_file,
-		overwrite=args.overwrite
-	)
-
-
-if __name__ == '__main__':
-	main(sys.argv[1:])
