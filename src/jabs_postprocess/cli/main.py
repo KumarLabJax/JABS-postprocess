@@ -165,8 +165,7 @@ def generate_tables(
     creating both bout-level and summary tables.
     """
     # Convert Path to string
-    project_folder_str = str(project_folder)
-    feature_folder_str = str(feature_folder) if feature_folder else None
+    feature_folder = feature_folder if feature_folder else None
     
     behaviors = []
     for behavior_name in behavior:
@@ -179,11 +178,11 @@ def generate_tables(
         behaviors.append(behavior_config)
     
     results = generate_behavior_tables.process_multiple_behaviors(
-        project_folder=project_folder_str,
+        project_folder=project_folder,
         behaviors=behaviors,
         out_prefix=out_prefix,
         out_bin_size=out_bin_size,
-        feature_folder=feature_folder_str,
+        feature_folder=feature_folder,
         overwrite=overwrite
     )
     
