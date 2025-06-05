@@ -1,10 +1,10 @@
-import pandas as pd
-import numpy as np
 import os
 import re
-import pytz
-
 from typing import List, Tuple
+
+import numpy as np
+import pandas as pd
+import pytz
 
 REQUIRED_METADATA = ['ExptNumber', 'sex', 'Strain']
 # Extra metadata is nice to have but may not be identical per-animal and ID marking can't be used to pick out individuals from metadata yet...

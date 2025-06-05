@@ -5,8 +5,8 @@ import numpy as np
 import mizani
 from matplotlib import gridspec
 
-from analysis_utils.parse_table import read_ltm_summary_table, filter_experiment_time
-from analysis_utils.plots import generate_time_vs_feature_plot
+from jabs_postprocess.analysis_utils.parse_table import read_ltm_summary_table, filter_experiment_time
+from jabs_postprocess.analysis_utils.plots import generate_time_vs_feature_plot
 
 #-------------------------------
 # Example multi-day summary plot

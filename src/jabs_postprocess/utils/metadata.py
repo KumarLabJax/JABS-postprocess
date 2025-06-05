@@ -1,9 +1,9 @@
-from pathlib import Path
 import re
-from datetime import datetime
 from copy import deepcopy
-import yaml
+from datetime import datetime
+from pathlib import Path
 
+import yaml
 
 POSE_REGEX_STR = '_pose_est_v([2-6]).h5'
 PREDICTION_REGEX_STR = '_behavior.h5'

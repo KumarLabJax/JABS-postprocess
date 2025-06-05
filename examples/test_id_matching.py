@@ -3,7 +3,7 @@ import numpy as np
 import plotnine as p9
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize
-from jabs_utils.read_utils import link_identities, read_pose_ids
+from jabs_postprocess.utils.read_utils import link_identities, read_pose_ids
 
 # Test folder with bleach-marked mice
 project_folder = '/media/bgeuther/Storage/TempStorage/test-behavior/'
