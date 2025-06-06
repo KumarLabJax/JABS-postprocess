@@ -78,7 +78,13 @@ def evaluate_ground_truth(args):
         warnings.warn('Time trimming is not currently supported, ignoring.')
 
     performance_df = generate_iou_scan(performance_annotations, args.stitch_scan, args.filter_scan, args.iou_thresholds, args.filter_ground_truth)
-    melted_df = pd.melt(performance_df, id_vars=["threshold", "stitch", "filter"])
+    if performance_df.empty:
+        warnings.warn("No performance data to analyze. Skipping plots and CSV generation.")
+        return
+
+    if args.scan_csv_output is not None:
+        performance_df.to_csv(args.scan_csv_output, index=False)
+        print(f"Scan performance data saved to {args.scan_csv_output}")
 
     # Get the best f1 score filtering parameters for each thresholds
     # optimal_filter_df = performance_df.groupby(['threshold']).apply(lambda x: x.iloc[np.nanargmax(x['f1'].values)] if np.any(~np.isnan(x['f1'].values)) else x.iloc[0]).reset_index(drop=True)
@@ -136,17 +142,24 @@ def evaluate_ground_truth(args):
         + p9.scale_fill_continuous(na_value=0)
     )
 
-    plot.save(args.scan_output, height=6, width=12, dpi=300)
+    if args.scan_output is not None:
+        plot.save(args.scan_output, height=6, width=12, dpi=300)
 
     winning_filters = pd.DataFrame(subset_df.iloc[np.argmax(subset_df['f1_plot'])]).T.reset_index(drop=True)[['stitch', 'filter']]
 
-    melted_winning = pd.concat([melted_df[(melted_df[['stitch', 'filter']] == row).all(axis='columns')] for _, row in winning_filters.iterrows()])
+    winning_bout_df = pd.merge(performance_df, winning_filters, on=['stitch', 'filter'])
+    if args.bout_csv_output is not None:
+        winning_bout_df.to_csv(args.bout_csv_output, index=False)
+        print(f"Bout performance data saved to {args.bout_csv_output}")
 
-    (
-        p9.ggplot(melted_winning[melted_winning['variable'].isin(['pr', 're', 'f1'])], p9.aes(x='threshold', y='value', color='variable'))
-        + p9.geom_line()
-        + p9.theme_bw()
-    ).save(args.bout_output, height=6, width=12, dpi=300)
+    melted_winning = pd.melt(winning_bout_df, id_vars=['threshold', 'stitch', 'filter'])
+
+    if args.bout_output is not None:
+        (
+            p9.ggplot(melted_winning[melted_winning['variable'].isin(['pr', 're', 'f1'])], p9.aes(x='threshold', y='value', color='variable'))
+            + p9.geom_line()
+            + p9.theme_bw()
+        ).save(args.bout_output, height=6, width=12, dpi=300)
 
     if args.ethogram_output is not None:
         # Prepare data for ethogram plot
@@ -205,6 +218,7 @@ def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan,
     Returns:
         pd.DataFrame containing performance across all combinations of the scan
     """
+    threshold_scan = np.round(threshold_scan, 2)
     # Loop over the animals
     performance_df = []
     for (cur_animal, cur_video), animal_df in all_annotations.groupby(['animal_idx', 'video_name']):
@@ -281,12 +295,14 @@ def main(argv):
     parser.add_argument('--bout_output', help='Output file to save the resulting bout performance plot.', default=None)
     parser.add_argument('--trim_time', help='Limit the duration in frames of videos for performance (e.g. only the first 2 minutes of a 10 minute video were densely annotated).', default=None, type=int)
     parser.add_argument('--ethogram_output', help='Output file to save the ethogram plot comparing GT and predictions.', default=None)
+    parser.add_argument('--scan_csv_output', help='Output file to save the filter scan performance data as a CSV.', default=None)
+    parser.add_argument('--bout_csv_output', help='Output file to save the resulting bout performance data as a CSV.', default=None)
     args = parser.parse_args()
 
     assert os.path.exists(args.ground_truth_folder)
     assert os.path.exists(args.prediction_folder)
-    if args.scan_output is None and args.bout_output is None and args.ethogram_output is None:
-        print('Neither scan, bout, nor ethogram outputs were selected, nothing to do. Please use --scan_output, --bout_output, or --ethogram_output.')
+    if args.scan_output is None and args.bout_output is None and args.ethogram_output is None and args.scan_csv_output is None and args.bout_csv_output is None:
+        print('No output files selected. Please use --scan_output, --bout_output, --ethogram_output, --scan_csv_output, or --bout_csv_output.')
         return
 
     evaluate_ground_truth(args)
