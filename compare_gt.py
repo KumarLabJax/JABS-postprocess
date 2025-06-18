@@ -272,22 +272,28 @@ def main(argv):
     parser.add_argument('--behavior', help='Behavior to evaluate predictions', required=True)
     parser.add_argument('--ground_truth_folder', help='Path to the JABS project which contains densely annotated ground truth data.', required=True)
     parser.add_argument('--prediction_folder', help='Path to the folder where behavior predictions were made.', required=True)
+    parser.add_argument('--results_output_folder', help='Output folder to save all the result plots.', required=True)
     parser.add_argument('--stitch_scan', help='List of stitching (time gaps in frames to merge bouts together) values to test.', type=float, nargs='+', default=np.arange(5, 46, 5).tolist())
     parser.add_argument('--filter_scan', help='List of filter (minimum duration in frames to consider real) values to test.', type=float, nargs='+', default=np.arange(5, 46, 5).tolist())
     parser.add_argument('--iou_thresholds', help='List of intersection over union thresholds to scan.', type=float, nargs='+', default=np.arange(0.05, 1.01, 0.05))
     parser.add_argument('--interpolation_size', help='Number of frames to interpolate missing data.', default=0, type=int)
     parser.add_argument('--filter_ground_truth', help='Apply filters to ground truth data (default is only to filter predictions).', default=False, action='store_true')
-    parser.add_argument('--scan_output', help='Output file to save the filter scan performance plot.', default=None)
-    parser.add_argument('--bout_output', help='Output file to save the resulting bout performance plot.', default=None)
     parser.add_argument('--trim_time', help='Limit the duration in frames of videos for performance (e.g. only the first 2 minutes of a 10 minute video were densely annotated).', default=None, type=int)
-    parser.add_argument('--ethogram_output', help='Output file to save the ethogram plot comparing GT and predictions.', default=None)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+
+    if args.results_output_folder is None:
+        print('No results output folder specified, nothing to do. Please use --results_output_folder.')
+        return
+    
+    os.makedirs(args.results_output_folder, exist_ok=True)
+
+    # Construct output paths
+    args.scan_output = os.path.join(args.results_output_folder, f"{args.behavior}_scan_performance.png")
+    args.bout_output = os.path.join(args.results_output_folder, f"{args.behavior}_bout_performance.png")
+    args.ethogram_output = os.path.join(args.results_output_folder, f"{args.behavior}_ethogram.png")
 
     assert os.path.exists(args.ground_truth_folder)
     assert os.path.exists(args.prediction_folder)
-    if args.scan_output is None and args.bout_output is None and args.ethogram_output is None:
-        print('Neither scan, bout, nor ethogram outputs were selected, nothing to do. Please use --scan_output, --bout_output, or --ethogram_output.')
-        return
 
     evaluate_ground_truth(args)
 
