@@ -285,9 +285,6 @@ def main(argv):
     parser.add_argument('--trim_time', help='Limit the duration in frames of videos for performance (e.g. only the first 2 minutes of a 10 minute video were densely annotated).', default=None, type=int)
     args = parser.parse_args(argv)
 
-    # Ensure thresholds are rounded to 2 decimal places
-    args.iou_thresholds = np.round(args.iou_thresholds, 2)
-
     if args.results_output_folder is None:
         print('No results output folder specified, nothing to do. Please use --results_output_folder.')
         return
@@ -295,11 +292,11 @@ def main(argv):
     os.makedirs(args.results_output_folder, exist_ok=True)
 
     # Construct output paths
-    args.scan_output = os.path.join(args.results_output_folder, f"{args.behavior}_scan_performance.png")
-    args.bout_output = os.path.join(args.results_output_folder, f"{args.behavior}_bout_performance.png")
-    args.ethogram_output = os.path.join(args.results_output_folder, f"{args.behavior}_ethogram.png")
     args.scan_csv_output = os.path.join(args.results_output_folder, f"{args.behavior}_scan_performance.csv")
     args.bout_csv_output = os.path.join(args.results_output_folder, f"{args.behavior}_bout_performance.csv")
+    args.ethogram_output = os.path.join(args.results_output_folder, f"{args.behavior}_ethogram.png")
+    args.scan_output = os.path.join(args.results_output_folder, f"{args.behavior}_scan_performance.png")
+    args.bout_output = os.path.join(args.results_output_folder, f"{args.behavior}_bout_performance.png")
 
     assert os.path.exists(args.ground_truth_folder)
     assert os.path.exists(args.prediction_folder)
