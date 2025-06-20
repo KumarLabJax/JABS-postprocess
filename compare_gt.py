@@ -86,17 +86,7 @@ def evaluate_ground_truth(args):
         performance_df.to_csv(args.scan_csv_output, index=False)
         print(f"Scan performance data saved to {args.scan_csv_output}")
 
-    # Get the best f1 score filtering parameters for each thresholds
-    # optimal_filter_df = performance_df.groupby(['threshold']).apply(lambda x: x.iloc[np.nanargmax(x['f1'].values)] if np.any(~np.isnan(x['f1'].values)) else x.iloc[0]).reset_index(drop=True)
-
-    # Prototyping plot to show the relationship between threshold and optimal parameters
-    # filter_selection_plot = (
-    #     p9.ggplot(optimal_filter_df)
-    #     + p9.geom_point(p9.aes(x='threshold', y='f1'), color='red')
-    #     + p9.geom_point(p9.aes(x='threshold', y='stitch/np.max(stitch)'), color='blue')
-    #     + p9.geom_point(p9.aes(x='threshold', y='filter/np.max(filter)'), color='green')
-    #     + p9.theme_bw()
-    # )
+    melted_df = pd.melt(performance_df, id_vars=["threshold", "stitch", "filter"])
 
     middle_threshold = np.sort(args.iou_thresholds)[int(np.floor(len(args.iou_thresholds) / 2))]
     
@@ -142,8 +132,7 @@ def evaluate_ground_truth(args):
         + p9.scale_fill_continuous(na_value=0)
     )
 
-    if args.scan_output is not None:
-        plot.save(args.scan_output, height=6, width=12, dpi=300)
+    plot.save(args.scan_output, height=6, width=12, dpi=300)
 
     winning_filters = pd.DataFrame(subset_df.iloc[np.argmax(subset_df['f1_plot'])]).T.reset_index(drop=True)[['stitch', 'filter']]
 
@@ -154,12 +143,11 @@ def evaluate_ground_truth(args):
 
     melted_winning = pd.melt(winning_bout_df, id_vars=['threshold', 'stitch', 'filter'])
 
-    if args.bout_output is not None:
-        (
-            p9.ggplot(melted_winning[melted_winning['variable'].isin(['pr', 're', 'f1'])], p9.aes(x='threshold', y='value', color='variable'))
-            + p9.geom_line()
-            + p9.theme_bw()
-        ).save(args.bout_output, height=6, width=12, dpi=300)
+    (
+        p9.ggplot(melted_winning[melted_winning['variable'].isin(['pr', 're', 'f1'])], p9.aes(x='threshold', y='value', color='variable'))
+        + p9.geom_line()
+        + p9.theme_bw()
+    ).save(args.bout_output, height=6, width=12, dpi=300)
 
     if args.ethogram_output is not None:
         # Prepare data for ethogram plot
@@ -218,7 +206,9 @@ def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan,
     Returns:
         pd.DataFrame containing performance across all combinations of the scan
     """
+    # Ensure thresholds are rounded to 2 decimal places
     threshold_scan = np.round(threshold_scan, 2)
+
     # Loop over the animals
     performance_df = []
     for (cur_animal, cur_video), animal_df in all_annotations.groupby(['animal_idx', 'video_name']):
@@ -286,24 +276,33 @@ def main(argv):
     parser.add_argument('--behavior', help='Behavior to evaluate predictions', required=True)
     parser.add_argument('--ground_truth_folder', help='Path to the JABS project which contains densely annotated ground truth data.', required=True)
     parser.add_argument('--prediction_folder', help='Path to the folder where behavior predictions were made.', required=True)
+    parser.add_argument('--results_output_folder', help='Output folder to save all the result plots and CSVs.', required=True)
     parser.add_argument('--stitch_scan', help='List of stitching (time gaps in frames to merge bouts together) values to test.', type=float, nargs='+', default=np.arange(5, 46, 5).tolist())
     parser.add_argument('--filter_scan', help='List of filter (minimum duration in frames to consider real) values to test.', type=float, nargs='+', default=np.arange(5, 46, 5).tolist())
-    parser.add_argument('--iou_thresholds', help='List of intersection over union thresholds to scan.', type=float, nargs='+', default=np.arange(0.05, 1.01, 0.05))
+    parser.add_argument('--iou_thresholds', help='List of intersection over union thresholds to scan (will be rounded to 2 decimal places).', type=float, nargs='+', default=np.round(np.arange(0.05, 1.01, 0.05), 2).tolist())
     parser.add_argument('--interpolation_size', help='Number of frames to interpolate missing data.', default=0, type=int)
     parser.add_argument('--filter_ground_truth', help='Apply filters to ground truth data (default is only to filter predictions).', default=False, action='store_true')
-    parser.add_argument('--scan_output', help='Output file to save the filter scan performance plot.', default=None)
-    parser.add_argument('--bout_output', help='Output file to save the resulting bout performance plot.', default=None)
     parser.add_argument('--trim_time', help='Limit the duration in frames of videos for performance (e.g. only the first 2 minutes of a 10 minute video were densely annotated).', default=None, type=int)
-    parser.add_argument('--ethogram_output', help='Output file to save the ethogram plot comparing GT and predictions.', default=None)
-    parser.add_argument('--scan_csv_output', help='Output file to save the filter scan performance data as a CSV.', default=None)
-    parser.add_argument('--bout_csv_output', help='Output file to save the resulting bout performance data as a CSV.', default=None)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+
+    # Ensure thresholds are rounded to 2 decimal places
+    args.iou_thresholds = np.round(args.iou_thresholds, 2)
+
+    if args.results_output_folder is None:
+        print('No results output folder specified, nothing to do. Please use --results_output_folder.')
+        return
+    
+    os.makedirs(args.results_output_folder, exist_ok=True)
+
+    # Construct output paths
+    args.scan_output = os.path.join(args.results_output_folder, f"{args.behavior}_scan_performance.png")
+    args.bout_output = os.path.join(args.results_output_folder, f"{args.behavior}_bout_performance.png")
+    args.ethogram_output = os.path.join(args.results_output_folder, f"{args.behavior}_ethogram.png")
+    args.scan_csv_output = os.path.join(args.results_output_folder, f"{args.behavior}_scan_performance.csv")
+    args.bout_csv_output = os.path.join(args.results_output_folder, f"{args.behavior}_bout_performance.csv")
 
     assert os.path.exists(args.ground_truth_folder)
     assert os.path.exists(args.prediction_folder)
-    if args.scan_output is None and args.bout_output is None and args.ethogram_output is None and args.scan_csv_output is None and args.bout_csv_output is None:
-        print('No output files selected. Please use --scan_output, --bout_output, --ethogram_output, --scan_csv_output, or --bout_csv_output.')
-        return
 
     evaluate_ground_truth(args)
 
