@@ -298,6 +298,7 @@ def main(argv):
     args.scan_output = os.path.join(args.results_output_folder, f"{args.behavior}_scan_performance.png")
     args.bout_output = os.path.join(args.results_output_folder, f"{args.behavior}_bout_performance.png")
 
+
     assert os.path.exists(args.ground_truth_folder)
     assert os.path.exists(args.prediction_folder)
 
