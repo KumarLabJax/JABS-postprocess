@@ -174,7 +174,7 @@ class VideoMetadata:
 	@property
 	def time_str(self):
 		"""Formatted version of the time string."""
-		return self._time.strftime('%Y-%m-%s %H:%M:%S')
+		return self._time.strftime('%Y-%m-%d %H:%M:%S')
 
 	@property
 	def date_start(self):
