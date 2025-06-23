@@ -6,7 +6,7 @@ import pytz
 
 from typing import List, Tuple
 
-REQUIRED_METADATA = ['ExptNumber', 'sex', 'Strain']
+REQUIRED_METADATA = ['ExptNumber', 'Sex', 'Strain']
 # Extra metadata is nice to have but may not be identical per-animal and ID marking can't be used to pick out individuals from metadata yet...
 EXTRA_METADATA_DEFAULT = ['Location', 'birthDate', 'MDSEnrichment1', 'MDSEnrichment2', 'MDSEnrichment3', 'ExptDoneBy', 'MDSFoodWater', 'MDSBedding', 'MDSLight', 'Set1', 'Set2', 'RecipientMouseNumber']
 
