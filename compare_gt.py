@@ -78,19 +78,15 @@ def evaluate_ground_truth(args):
         warnings.warn('Time trimming is not currently supported, ignoring.')
 
     performance_df = generate_iou_scan(performance_annotations, args.stitch_scan, args.filter_scan, args.iou_thresholds, args.filter_ground_truth)
+    if performance_df.empty:
+        warnings.warn("No performance data to analyze. Skipping plots and CSV generation.")
+        return
+
+    if args.scan_csv_output is not None:
+        performance_df.to_csv(args.scan_csv_output, index=False)
+        print(f"Scan performance data saved to {args.scan_csv_output}")
+
     melted_df = pd.melt(performance_df, id_vars=["threshold", "stitch", "filter"])
-
-    # Get the best f1 score filtering parameters for each thresholds
-    # optimal_filter_df = performance_df.groupby(['threshold']).apply(lambda x: x.iloc[np.nanargmax(x['f1'].values)] if np.any(~np.isnan(x['f1'].values)) else x.iloc[0]).reset_index(drop=True)
-
-    # Prototyping plot to show the relationship between threshold and optimal parameters
-    # filter_selection_plot = (
-    #     p9.ggplot(optimal_filter_df)
-    #     + p9.geom_point(p9.aes(x='threshold', y='f1'), color='red')
-    #     + p9.geom_point(p9.aes(x='threshold', y='stitch/np.max(stitch)'), color='blue')
-    #     + p9.geom_point(p9.aes(x='threshold', y='filter/np.max(filter)'), color='green')
-    #     + p9.theme_bw()
-    # )
 
     middle_threshold = np.sort(args.iou_thresholds)[int(np.floor(len(args.iou_thresholds) / 2))]
     
@@ -140,7 +136,12 @@ def evaluate_ground_truth(args):
 
     winning_filters = pd.DataFrame(subset_df.iloc[np.argmax(subset_df['f1_plot'])]).T.reset_index(drop=True)[['stitch', 'filter']]
 
-    melted_winning = pd.concat([melted_df[(melted_df[['stitch', 'filter']] == row).all(axis='columns')] for _, row in winning_filters.iterrows()])
+    winning_bout_df = pd.merge(performance_df, winning_filters, on=['stitch', 'filter'])
+    if args.bout_csv_output is not None:
+        winning_bout_df.to_csv(args.bout_csv_output, index=False)
+        print(f"Bout performance data saved to {args.bout_csv_output}")
+
+    melted_winning = pd.melt(winning_bout_df, id_vars=['threshold', 'stitch', 'filter'])
 
     (
         p9.ggplot(melted_winning[melted_winning['variable'].isin(['pr', 're', 'f1'])], p9.aes(x='threshold', y='value', color='variable'))
@@ -205,6 +206,9 @@ def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan,
     Returns:
         pd.DataFrame containing performance across all combinations of the scan
     """
+    # Ensure thresholds are rounded to 2 decimal places
+    threshold_scan = np.round(threshold_scan, 2)
+
     # Loop over the animals
     performance_df = []
     for (cur_animal, cur_video), animal_df in all_annotations.groupby(['animal_idx', 'video_name']):
@@ -272,10 +276,10 @@ def main(argv):
     parser.add_argument('--behavior', help='Behavior to evaluate predictions', required=True)
     parser.add_argument('--ground_truth_folder', help='Path to the JABS project which contains densely annotated ground truth data.', required=True)
     parser.add_argument('--prediction_folder', help='Path to the folder where behavior predictions were made.', required=True)
-    parser.add_argument('--results_output_folder', help='Output folder to save all the result plots.', required=True)
+    parser.add_argument('--results_output_folder', help='Output folder to save all the result plots and CSVs.', required=True)
     parser.add_argument('--stitch_scan', help='List of stitching (time gaps in frames to merge bouts together) values to test.', type=float, nargs='+', default=np.arange(5, 46, 5).tolist())
     parser.add_argument('--filter_scan', help='List of filter (minimum duration in frames to consider real) values to test.', type=float, nargs='+', default=np.arange(5, 46, 5).tolist())
-    parser.add_argument('--iou_thresholds', help='List of intersection over union thresholds to scan.', type=float, nargs='+', default=np.arange(0.05, 1.01, 0.05))
+    parser.add_argument('--iou_thresholds', help='List of intersection over union thresholds to scan (will be rounded to 2 decimal places).', type=float, nargs='+', default=np.round(np.arange(0.05, 1.01, 0.05), 2).tolist())
     parser.add_argument('--interpolation_size', help='Number of frames to interpolate missing data.', default=0, type=int)
     parser.add_argument('--filter_ground_truth', help='Apply filters to ground truth data (default is only to filter predictions).', default=False, action='store_true')
     parser.add_argument('--trim_time', help='Limit the duration in frames of videos for performance (e.g. only the first 2 minutes of a 10 minute video were densely annotated).', default=None, type=int)
@@ -288,9 +292,12 @@ def main(argv):
     os.makedirs(args.results_output_folder, exist_ok=True)
 
     # Construct output paths
+    args.scan_csv_output = os.path.join(args.results_output_folder, f"{args.behavior}_scan_performance.csv")
+    args.bout_csv_output = os.path.join(args.results_output_folder, f"{args.behavior}_bout_performance.csv")
+    args.ethogram_output = os.path.join(args.results_output_folder, f"{args.behavior}_ethogram.png")
     args.scan_output = os.path.join(args.results_output_folder, f"{args.behavior}_scan_performance.png")
     args.bout_output = os.path.join(args.results_output_folder, f"{args.behavior}_bout_performance.png")
-    args.ethogram_output = os.path.join(args.results_output_folder, f"{args.behavior}_ethogram.png")
+
 
     assert os.path.exists(args.ground_truth_folder)
     assert os.path.exists(args.prediction_folder)
