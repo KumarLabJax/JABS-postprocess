@@ -315,7 +315,7 @@ def main(argv):
 	parser = argparse.ArgumentParser(description="Generate behavior plots for multi-day behavior analysis.")
 	parser.add_argument('--behavior', type=str, required=True, help='Name of the behavior (e.g., Drinking)')
 	parser.add_argument('--results_file', type=str, required=True, help='Path to the summary results CSV file')
-	parser.add_argument('--jmcrs_data', type=str, required=True, help='Path to the JCMS metadata file (Excel)')
+	parser.add_argument('--jmcrs_data', type=str, required=False, default='/projects/kumar-lab/choij/lepr_poses/2023-09-07 TOM_TotalQueryForConfluence.xlsx', help='Path to the JCMS metadata file (Excel). Defaults to the 2023-09-07 file if not specified.')
 	parser.add_argument('--remove_experiments', type=str, default='', help='Comma-separated list of experiment IDs to remove (e.g., MDB0003,MDX0008)')
 	parser.add_argument('--output_dir', type=str, required=True, help='Output directory for all plot files (will be created if it does not already exist)')
 	args = parser.parse_args(argv)
