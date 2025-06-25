@@ -16,7 +16,7 @@ import itertools
 from analysis_utils.parse_table import read_ltm_summary_table,filter_experiment_time
 
 
-def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experiments, output_dir="."):
+def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experiments, output_dir=".", sex_comparison=False):
 	# Create output directory if it doesn't exist
 	os.makedirs(output_dir, exist_ok=True)
 
@@ -172,14 +172,54 @@ def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experimen
 
 
 	# Generate Relative Experiment Time Plots
-	proportion_fig = generate_time_vs_feature_plot(f"Proportion of Time Spent {behavior}", "Relative Experiment Time", "prop_rel", df, 'relative_exp_time', 'rel_time_behavior', title=header_data['Behavior'][0])
-	bout_num_fig = generate_time_vs_feature_plot("Average Number of Bouts", "Relative Experiment Time", "numbout_rel", df, 'relative_exp_time', 'bout_behavior', title=header_data['Behavior'][0])
+	proportion_fig = generate_time_vs_feature_plot(
+		y_axis=f"Proportion of Time Spent {behavior}",
+		x_axis="Relative Experiment Time",
+		outfile="prop_rel",
+		df=df,
+		time='relative_exp_time',
+		feature='rel_time_behavior',
+		title=f"{behavior}"
+	)
+	bout_num_fig = generate_time_vs_feature_plot(
+		y_axis="Average Number of Bouts",
+		x_axis="Relative Experiment Time",
+		outfile="numbout_rel",
+		df=df,
+		time='relative_exp_time',
+		feature='bout_behavior',
+		title="# Bouts"
+	)
 
 	df['avg_bout_length_sec'] = df['avg_bout_length']/30
 	# Generate ZT Experiment Time Plots
-	zt_proportion_fig = generate_time_vs_feature_plot(f"Proportion of Time Spent {behavior}", "ZT hour", "prop_zt", filter_experiment_time(df,num_hours=12), 'zt_time_hour', 'rel_time_behavior', title=header_data['Behavior'][0])
-	zt_bout_num_fig = generate_time_vs_feature_plot("Average Number of Bouts", "ZT hour", "numbout_zt", filter_experiment_time(df,num_hours=12), 'zt_time_hour', 'bout_behavior', title=header_data['Behavior'][0])
-	zt_bout_length_fig = generate_time_vs_feature_plot("Average Bout Length", "ZT hour", "boutlen_zt", filter_experiment_time(df,num_hours=12),'zt_time_hour', 'avg_bout_length_sec', title=header_data['Behavior'][0])
+	zt_proportion_fig = generate_time_vs_feature_plot(
+		y_axis=f"Proportion of Time Spent {behavior}",
+		x_axis="ZT hour",
+		outfile="prop_zt",
+		df=filter_experiment_time(df,num_hours=12),
+		time='zt_time_hour',
+		feature='rel_time_behavior',
+		title=f"{behavior}: ZT"
+	)
+	zt_bout_num_fig = generate_time_vs_feature_plot(
+		y_axis="Average Number of Bouts",
+		x_axis="ZT hour",
+		outfile="numbout_zt",
+		df=filter_experiment_time(df,num_hours=12),
+		time='zt_time_hour',
+		feature='bout_behavior',
+		title="# Bouts: ZT"
+	)
+	zt_bout_length_fig = generate_time_vs_feature_plot(
+		y_axis="Average Bout Length",
+		x_axis="ZT hour",
+		outfile="boutlen_zt",
+		df=filter_experiment_time(df,num_hours=12),
+		time='zt_time_hour',
+		feature='avg_bout_length_sec',
+		title="Bout Length: ZT"
+	)
 
 
 	# Generate Room Comparison Line Plot (males only)
@@ -204,8 +244,7 @@ def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experimen
 						fun_y=np.mean, geom=p9.geom_smooth) + \
 		p9.facet_wrap('Strain') + \
 		custom_theme + \
-		p9.labs(title=f'{behavior} Behavior by Room and Strain (Males Only, n={len(df_males["ExptNumber"].unique())} arenas)', 
-				x='Zeitgeber Time (hours)', y='Average Number of Bouts') + \
+		p9.labs(title=f"Room Comp: {behavior}", x='Zeitgeber Time (hours)', y='Average Number of Bouts') + \
 		p9.scale_color_brewer(type='qual', palette='Set1') + \
 		p9.scale_fill_brewer(type='qual', palette='Set1', guide=False)
 	try:
@@ -221,8 +260,8 @@ def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experimen
 			p9.geom_boxplot(alpha=0.7) + \
 			p9.facet_wrap(lightcycle_col) + \
 			custom_theme + \
-			p9.ggtitle(f'Boxplot of {behavior} Behavior by Strain, Room, and Light Cycle') + \
-			p9.labs(y = "Average number of bouts", x="Strain") + \
+			p9.ggtitle(f'Room Comp Box: {behavior_col}') + \
+			p9.labs(y = behavior_col, x="Strain") + \
 			p9.coord_cartesian(ylim=(0,20)) + \
 			p9.scale_fill_brewer(type='qual', palette='Set1')
 		try:
@@ -243,8 +282,8 @@ def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experimen
 			custom_theme + \
 			p9.facet_wrap('~' + strain_col, scales='free') + \
 			p9.theme(axis_text_x=p9.element_text(rotation=90, hjust=1), axis_ticks=p9.element_blank()) + \
-			p9.ggtitle(f'Violin Plot of {behavior} Behavior by Strain and Light Cycle') + \
-			p9.labs(y = "Average Bout Length (seconds)", x="Light Cycle") + \
+			p9.ggtitle(f'Violin: {behavior_col}') + \
+			p9.labs(y = "Avg Bout Length (s)", x="Light Cycle") + \
 			p9.scale_fill_brewer(type='qual', palette='Set1')
 		try:
 			plot.save(os.path.join(output_dir, f'violinplot_light_dark_bout_length_compare_{behavior}.svg'))
@@ -305,6 +344,145 @@ def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experimen
 	except Exception as e:
 		print(f"Error saving individual_boutlen_zt_{behavior}.svg: {e}")
 
+	# --- Sex Comparison Plots ---
+	if sex_comparison:
+		print("Generating sex comparison plots...")
+		# Time series plots by Sex and Strain
+		df['Sex_Strain'] = df['Sex'].astype(str) + ' ' + df['Strain'].astype(str)
+		generate_time_vs_feature_plot(
+			y_axis=f"Proportion of Time Spent {behavior}",
+			x_axis="Relative Experiment Time",
+			outfile="prop_rel_sex_strain",
+			df=df,
+			time='relative_exp_time',
+			feature='rel_time_behavior',
+			factor='Sex_Strain',
+			title=f"Proportion of Time Spent by Sex and Strain ({behavior})"
+		)
+		generate_time_vs_feature_plot(
+			y_axis="Average Number of Bouts",
+			x_axis="Relative Experiment Time",
+			outfile="numbout_rel_sex_strain",
+			df=df,
+			time='relative_exp_time',
+			feature='bout_behavior',
+			factor='Sex_Strain',
+			title=f"Average Number of Bouts by Sex and Strain ({behavior})"
+		)
+		df['avg_bout_length_sec'] = df['avg_bout_length']/30
+		generate_time_vs_feature_plot(
+			y_axis="Average Bout Length (s)",
+			x_axis="Relative Experiment Time",
+			outfile="boutlen_rel_sex_strain",
+			df=df,
+			time='relative_exp_time',
+			feature='avg_bout_length_sec',
+			factor='Sex_Strain',
+			title=f"Average Bout Length by Sex and Strain ({behavior})"
+		)
+		# ZT time series
+		# Add Sex_Strain column for combined lines
+		df['Sex_Strain'] = df['Sex'].astype(str) + ' ' + df['Strain'].astype(str)
+		zt_df = filter_experiment_time(df, num_hours=12)
+		zt_df['Sex_Strain'] = zt_df['Sex'].astype(str) + ' ' + zt_df['Strain'].astype(str)
+		generate_time_vs_feature_plot(
+			y_axis=f"Proportion of Time Spent {behavior}",
+			x_axis="ZT hour",
+			outfile="prop_zt_sex_strain",
+			df=zt_df,
+			time='zt_time_hour',
+			feature='rel_time_behavior',
+			factor='Sex_Strain',
+			title=f"Proportion of Time Spent by Sex and Strain (ZT, {behavior})"
+		)
+		generate_time_vs_feature_plot(
+			y_axis="Average Number of Bouts",
+			x_axis="ZT hour",
+			outfile="numbout_zt_sex_strain",
+			df=zt_df,
+			time='zt_time_hour',
+			feature='bout_behavior',
+			factor='Sex_Strain',
+			title=f"Average Number of Bouts by Sex and Strain (ZT, {behavior})"
+		)
+		generate_time_vs_feature_plot(
+			y_axis="Average Bout Length (s)",
+			x_axis="ZT hour",
+			outfile="boutlen_zt_sex_strain",
+			df=zt_df,
+			time='zt_time_hour',
+			feature='avg_bout_length_sec',
+			factor='Sex_Strain',
+			title=f"Average Bout Length by Sex and Strain (ZT, {behavior})"
+		)
+		# Boxplots by Sex and Strain
+		def generate_sex_comp_box_plot(df, measure_col, sex_col, strain_col, lightcycle_col, outfile):
+			plot = p9.ggplot(df, p9.aes(x=sex_col, y=measure_col, fill=sex_col)) + \
+				p9.geom_boxplot(alpha=0.7) + \
+				p9.facet_wrap(f'~{strain_col} + {lightcycle_col}') + \
+				custom_theme + \
+				p9.ggtitle(f'Boxplot of {measure_col} by Sex, Strain, and Light Cycle') + \
+				p9.labs(y = measure_col, x="Sex") + \
+				p9.scale_fill_brewer(type='qual', palette='Set1')
+			try:
+				plot.save(os.path.join(output_dir, f'{outfile}_sex_strain_box_{behavior}.svg'))
+			except Exception as e:
+				print(f"Error saving {outfile}_sex_strain_box_{behavior}.svg: {e}")
+		# Add LightCycle if not present
+		if 'LightCycle' not in df.columns:
+			df['LightCycle'] = df['zt_time_hour'].apply(lambda x: 'Light' if 0 <= x < 12 else 'Dark')
+		filtered_df = filter_experiment_time(df,num_hours=12)
+		generate_sex_comp_box_plot(filtered_df, 'rel_time_behavior', 'Sex', 'Strain', 'LightCycle', 'prop')
+		generate_sex_comp_box_plot(filtered_df, 'bout_behavior', 'Sex', 'Strain', 'LightCycle', 'numbout')
+		generate_sex_comp_box_plot(filtered_df, 'avg_bout_length_sec', 'Sex', 'Strain', 'LightCycle', 'boutlen')
+
+		# Relative experiment time series by Sex, faceted by Strain
+		for y_axis, feature, outfile, title in [
+			(f"Proportion of Time Spent {behavior}", 'rel_time_behavior', 'prop_rel_sex_strain', f"Proportion of Time Spent by Sex {behavior}"),
+			("Average Number of Bouts", 'bout_behavior', 'numbout_rel_sex_strain', f"Average Number of Bouts by Sex {behavior}"),
+			("Average Bout Length (s)", 'avg_bout_length_sec', 'boutlen_rel_sex_strain', f"Average Bout Length by Sex {behavior}")
+		]:
+			plot = generate_time_vs_feature_plot(
+				y_axis=y_axis,
+				x_axis="Relative Experiment Time",
+				outfile=outfile,
+				df=df,
+				time='relative_exp_time',
+				feature=feature,
+				factor='Sex',
+				title=title,
+				save_files=False
+			)
+			plot = plot + p9.facet_wrap('~Strain')
+			try:
+				plot.save(os.path.join(output_dir, f'{outfile}_{behavior}.svg'))
+			except Exception as e:
+				print(f"Error saving {outfile}_{behavior}.svg: {e}")
+
+		# ZT time series by Sex, faceted by Strain
+		zt_df = filter_experiment_time(df, num_hours=12)
+		for y_axis, feature, outfile, title in [
+			(f"Proportion of Time Spent {behavior}", 'rel_time_behavior', 'prop_zt_sex_strain', f"Proportion of Time Spent by Sex (ZT {behavior})"),
+			("Average Number of Bouts", 'bout_behavior', 'numbout_zt_sex_strain', f"Average Number of Bouts by Sex (ZT {behavior})"),
+			("Average Bout Length (s)", 'avg_bout_length_sec', 'boutlen_zt_sex_strain', f"Average Bout Length by Sex (ZT {behavior})")
+		]:
+			plot = generate_time_vs_feature_plot(
+				y_axis=y_axis,
+				x_axis="ZT hour",
+				outfile=outfile,
+				df=zt_df,
+				time='zt_time_hour',
+				feature=feature,
+				factor='Sex',
+				title=title,
+				save_files=False
+			)
+			plot = plot + p9.facet_wrap('~Strain')
+			try:
+				plot.save(os.path.join(output_dir, f'{outfile}_{behavior}.svg'))
+			except Exception as e:
+				print(f"Error saving {outfile}_{behavior}.svg: {e}")
+
 
 def main(argv):
 	import argparse
@@ -314,6 +492,7 @@ def main(argv):
 	parser.add_argument('--jmcrs_data', type=str, required=False, default='/projects/kumar-lab/choij/lepr_poses/2023-09-07 TOM_TotalQueryForConfluence.xlsx', help='Path to the JCMS metadata file (Excel). Defaults to the 2023-09-07 file if not specified.')
 	parser.add_argument('--remove_experiments', type=str, default='', help='Comma-separated list of experiment IDs to remove (e.g., MDB0003,MDX0008)')
 	parser.add_argument('--output_dir', type=str, required=True, help='Output directory for all plot files (will be created if it does not already exist)')
+	parser.add_argument('--sex_comparison', action='store_true', help='If set, generate sex comparison plots (default: do not generate)')
 	args = parser.parse_args(argv)
 
 	remove_experiments = [x.strip() for x in args.remove_experiments.split(',') if x.strip()] if args.remove_experiments else []
@@ -323,7 +502,8 @@ def main(argv):
 		results_file=args.results_file,
 		jmcrs_data=args.jmcrs_data,
 		remove_experiments=remove_experiments,
-		output_dir=args.output_dir
+		output_dir=args.output_dir,
+		sex_comparison=args.sex_comparison
 	)
 
 if __name__ == "__main__":
