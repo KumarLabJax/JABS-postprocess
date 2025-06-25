@@ -15,30 +15,38 @@ from mizani import formatters, breaks
 import os
 import scipy
 import itertools
-from parse_table import read_ltm_summary_table,filter_experiment_time
+# from parse_table import read_ltm_summary_table,filter_experiment_time
 # DONT FORGET TO change the above line to be:
-#from analysis_utils.parse_table import read_ltm_summary_table,filter_experiment_time
+from analysis_utils.parse_table import read_ltm_summary_table,filter_experiment_time
 
 
 def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experiments, output_dir="."):
-	import pandas as pd
-	import plotnine as p9
-	import re
-	import numpy as np
-	import mizani
-	from mizani import formatters, breaks
-	import os
-	import scipy
-	import itertools
-	from parse_table import read_ltm_summary_table, filter_experiment_time
-
 	# Create output directory if it doesn't exist
 	os.makedirs(output_dir, exist_ok=True)
+
+	# Custom theme for consistent styling
+	custom_theme = p9.theme_bw() + \
+		p9.theme(
+			axis_text_y=p9.element_text(size=12),
+			axis_text_x=p9.element_text(size=12),
+			axis_title=p9.element_text(size=14, face='bold'),
+			plot_title=p9.element_text(size=16, face='bold'),
+			legend_title=p9.element_text(size=12, face='bold'),
+			legend_text=p9.element_text(size=10),
+			panel_grid_minor=p9.element_blank()
+		)
+
+	print(f"Generating plots for {behavior} behavior...")
 
 	plot_title = f"{behavior} Behavior"
 
 	# Read in the summary results
 	header_data, df = read_ltm_summary_table(results_file, jmcrs_metadata=jmcrs_data)
+
+	# Check if data exists before plotting
+	if len(df) == 0:
+		print(f"Warning: No data available for {behavior} behavior")
+		return
 
 	# Extract experiment number from exp_prefix (remove underscore)
 	df['ExptNumber'] = df['exp_prefix'].str.rstrip('_')
@@ -103,6 +111,10 @@ def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experimen
 	# Proportion of time where there are valid predictions need to be over 0.5 for them to remain in the plotting.
 	df = df[df['prop_time_alive'] > .5]
 
+	# Get sample size information
+	n_arenas = len(df['ExptNumber'].unique())
+	print(f"Number of arenas in analysis: {n_arenas}")
+
 	# df = df[df['Sex']=='F']
 
 	# This function has been modified from 
@@ -139,7 +151,7 @@ def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experimen
 			plot = plot + p9.geom_bar(p9.aes(x=time, y='lights_val'), light_df, width=light_width, stat='identity', fill='lightgrey')
 			plot = plot + p9.stat_summary(p9.aes(x=time, y=feature, color=factor, fill=factor), fun_ymin=lambda x: np.mean(x)-np.std(x)/np.sqrt(len(x)), fun_ymax=lambda x: np.mean(x)+np.std(x)/np.sqrt(len(x)), fun_y=np.mean, geom=p9.geom_smooth)
 		# Clean up some formatting
-		plot = plot + p9.theme_bw()
+		plot = plot + custom_theme
 		# Try to handle the different types of times
 		# With full datetime, rotate
 		if pd.api.types.is_datetime64_any_dtype(col_types[time]):
@@ -150,13 +162,16 @@ def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experimen
 			# breaks=breaks.timedelta_breaks(n_breaks)
 		# 
 		if title is not None:
-			plot = plot + p9.labs(title=plot_title, color=factor, y=y_axis, x=x_axis)
+			plot = plot + p9.labs(title=f"{title} (n={n_arenas} arenas)", color=factor, y=y_axis, x=x_axis)
 		else:
 			plot = plot + p9.labs(color=factor, y=feature)
 		plot = plot + p9.scale_color_brewer(type='qual', palette='Set1')
-		plot = plot + p9.scale_fill_brewer(type='qual', palette='Set1', guide=False) + p9.theme(axis_text_y=p9.element_text(size=18), axis_text_x=p9.element_text(size=18))
+		plot = plot + p9.scale_fill_brewer(type='qual', palette='Set1', guide=False)
 		if save_files:
-			plot.save(os.path.join(output_dir, f'{outfile}_{behavior}.svg'))
+			try:
+				plot.save(os.path.join(output_dir, f'{outfile}_{behavior}.svg'))
+			except Exception as e:
+				print(f"Error saving {outfile}_{behavior}.svg: {e}")
 		return plot
 
 
@@ -172,7 +187,7 @@ def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experimen
 
 
 	# Generate Room Comparison Line Plot (males only)
-	# The room comparison was only in males
+	# The room comparison was only in males (in terms of experiment design)
 	df['LightCycle'] = df['zt_time_hour'].apply(lambda x: 'Light' if 0 <= x < 12 else 'Dark')
 	df_males = df[df['Sex']=='M']
 	
@@ -192,20 +207,32 @@ def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experimen
 						fun_ymax=lambda x: np.mean(x)+np.std(x)/np.sqrt(len(x)), 
 						fun_y=np.mean, geom=p9.geom_smooth) + \
 		p9.facet_wrap('Strain') + \
-		p9.theme_bw() + \
-		p9.labs(title=f'{behavior} Behavior by Room and Strain (Males Only)', 
-				x='ZT Hour', y='Average Number of Bouts') + \
-		p9.theme(axis_text_y=p9.element_text(size=18), axis_text_x=p9.element_text(size=18)) + \
+		custom_theme + \
+		p9.labs(title=f'{behavior} Behavior by Room and Strain (Males Only, n={len(df_males["ExptNumber"].unique())} arenas)', 
+				x='Zeitgeber Time (hours)', y='Average Number of Bouts') + \
 		p9.scale_color_brewer(type='qual', palette='Set1') + \
 		p9.scale_fill_brewer(type='qual', palette='Set1', guide=False)
-	room_plot.save(os.path.join(output_dir, f'room_comp_numbouts_{behavior}.svg'))
+	try:
+		room_plot.save(os.path.join(output_dir, f'room_comp_numbouts_{behavior}.svg'))
+	except Exception as e:
+		print(f"Error saving room_comp_numbouts_{behavior}.svg: {e}")
 
 
 	# Generate Room Comparison Box Plot
 
 	def generate_room_comp_box_plot(df, behavior_col, strain_col, room_col, lightcycle_col):
-		plot = p9.ggplot(df, p9.aes(x=strain_col, y=behavior_col, fill=room_col)) + p9.geom_boxplot() + p9.facet_wrap(lightcycle_col) + p9.ggtitle('Boxplot of Behavior by Strain, Room, and Light Cycle') + p9.labs(y = "Average number of bouts") + p9.coord_cartesian(ylim=(0,20)) + p9.theme(axis_text_y=p9.element_text(size=18), axis_text_x=p9.element_text(size=18))
-		plot.save(os.path.join(output_dir, f'room_comp_box_{behavior}.svg'))
+		plot = p9.ggplot(df, p9.aes(x=strain_col, y=behavior_col, fill=room_col)) + \
+			p9.geom_boxplot(alpha=0.7) + \
+			p9.facet_wrap(lightcycle_col) + \
+			custom_theme + \
+			p9.ggtitle(f'Boxplot of {behavior} Behavior by Strain, Room, and Light Cycle') + \
+			p9.labs(y = "Average number of bouts", x="Strain") + \
+			p9.coord_cartesian(ylim=(0,20)) + \
+			p9.scale_fill_brewer(type='qual', palette='Set1')
+		try:
+			plot.save(os.path.join(output_dir, f'room_comp_box_{behavior}.svg'))
+		except Exception as e:
+			print(f"Error saving room_comp_box_{behavior}.svg: {e}")
 
 	filtered_df = filter_experiment_time(df_males,num_hours=12)
 	generate_room_comp_box_plot(filtered_df, 'bout_behavior', 'Strain', 'Room', 'LightCycle')
@@ -213,8 +240,20 @@ def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experimen
 
 	# Generate Strain Comparison Violin Plot of average bout lengths across light cycle
 	def generate_strain_comp_box_plot(df, behavior_col, strain_col, lightcycle_col):
-		plot = p9.ggplot(df, p9.aes(x=strain_col, y=behavior_col, fill=lightcycle_col)) + p9.coord_cartesian(ylim=(0,30)) + p9.geom_violin(width=0.3) + p9.theme_bw() + p9.facet_wrap('~' + strain_col, scales='free') + p9.theme(axis_text_x=p9.element_text(rotation=90, hjust=1), axis_ticks=p9.element_blank()) + p9.ggtitle('Violin Plot of Behavior by Strain and Light Cycle') + p9.labs(y = "Average Bout Length")
-		plot.save(os.path.join(output_dir, f'violinplot_light_dark_bout_length_compare_{behavior}.svg'))
+		plot = p9.ggplot(df, p9.aes(x=strain_col, y=behavior_col, fill=lightcycle_col)) + \
+			p9.coord_cartesian(ylim=(0,30)) + \
+			p9.geom_violin(width=0.3, alpha=0.7) + \
+			p9.geom_boxplot(width=0.2, fill='white', alpha=0.7) + \
+			custom_theme + \
+			p9.facet_wrap('~' + strain_col, scales='free') + \
+			p9.theme(axis_text_x=p9.element_text(rotation=90, hjust=1), axis_ticks=p9.element_blank()) + \
+			p9.ggtitle(f'Violin Plot of {behavior} Behavior by Strain and Light Cycle') + \
+			p9.labs(y = "Average Bout Length (seconds)", x="Light Cycle") + \
+			p9.scale_fill_brewer(type='qual', palette='Set1')
+		try:
+			plot.save(os.path.join(output_dir, f'violinplot_light_dark_bout_length_compare_{behavior}.svg'))
+		except Exception as e:
+			print(f"Error saving violinplot_light_dark_bout_length_compare_{behavior}.svg: {e}")
 
 	filtered_df = filter_experiment_time(df,num_hours=12)
 	generate_strain_comp_box_plot(filtered_df, 'avg_bout_length_sec', 'Strain', 'LightCycle')
@@ -223,29 +262,52 @@ def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experimen
 	df['Unique_animal'] = df['longterm_idx'].astype(str) + df['exp_prefix']
 	# Generate plots with every individual as a line
 	prop_fig = generate_time_vs_feature_plot(f"Proportion of Time Spent {behavior}", "Relative Experiment Time", "delete", df, 'relative_exp_time', 'rel_time_behavior',factor='Unique_animal', draw_data=False, title=header_data['Behavior'][0], save_files=False)
-	plot_prop_fig = prop_fig + p9.geom_line(p9.aes(x='relative_exp_time', y='rel_time_behavior',group='Unique_animal', color='Strain'), alpha=0.5)
-	plot_prop_fig.save(os.path.join(output_dir, f"individual_prop_rel_{behavior}.svg"))
+	plot_prop_fig = prop_fig + p9.geom_line(p9.aes(x='relative_exp_time', y='rel_time_behavior',group='Unique_animal', color='Strain'), alpha=0.3) + \
+		custom_theme + p9.labs(title=f"Individual {behavior} Behavior (n={n_arenas} arenas)")
+	try:
+		plot_prop_fig.save(os.path.join(output_dir, f"individual_prop_rel_{behavior}.svg"))
+	except Exception as e:
+		print(f"Error saving individual_prop_rel_{behavior}.svg: {e}")
 
 
 	num_bout = generate_time_vs_feature_plot("Average Number of Bouts", "Relative Experiment Time", "delete", df, 'relative_exp_time', 'bout_behavior', draw_data=False, title=header_data['Behavior'][0], save_files=False)
-	plot_prop_fig = num_bout + p9.geom_line(p9.aes(x='relative_exp_time', y='bout_behavior',group='Unique_animal', color='Strain'), alpha=0.5)
-	plot_prop_fig.save(os.path.join(output_dir, f"individual_numbout_rel_{behavior}.svg"))
+	plot_prop_fig = num_bout + p9.geom_line(p9.aes(x='relative_exp_time', y='bout_behavior',group='Unique_animal', color='Strain'), alpha=0.3) + \
+		custom_theme + p9.labs(title=f"Individual Bout Numbers (n={n_arenas} arenas)")
+	try:
+		plot_prop_fig.save(os.path.join(output_dir, f"individual_numbout_rel_{behavior}.svg"))
+	except Exception as e:
+		print(f"Error saving individual_numbout_rel_{behavior}.svg: {e}")
 
 
 	df['avg_bout_length_sec'] = df['avg_bout_length']/30
 
 	# Generate ZT Experiment Time Plots
 	zt_prop_fig = generate_time_vs_feature_plot(f"Proportion of Time Spent {behavior}", "ZT hour", "delete", filter_experiment_time(df,num_hours=12), 'zt_time_hour', 'rel_time_behavior', draw_data=False, title=header_data['Behavior'][0], save_files=False)
-	plot_zt_prop_fig = zt_prop_fig + p9.stat_summary(p9.aes(x='zt_time_hour', y='rel_time_behavior',group='Unique_animal', color='Strain'), geom=p9.geom_line, fun_y=np.mean, alpha=0.5)
-	plot_zt_prop_fig.save(os.path.join(output_dir, f"individual_prop_zt_{behavior}.svg"))
+	plot_zt_prop_fig = zt_prop_fig + p9.stat_summary(p9.aes(x='zt_time_hour', y='rel_time_behavior',group='Unique_animal', color='Strain'), geom=p9.geom_line, fun_y=np.mean, alpha=0.3) + \
+		p9.geom_vline(xintercept=12, linetype='dashed', alpha=0.5, color='red') + \
+		custom_theme + p9.labs(title=f"Individual {behavior} Behavior by ZT (n={n_arenas} arenas)")
+	try:
+		plot_zt_prop_fig.save(os.path.join(output_dir, f"individual_prop_zt_{behavior}.svg"))
+	except Exception as e:
+		print(f"Error saving individual_prop_zt_{behavior}.svg: {e}")
 
 	zt_bout_num_fig = generate_time_vs_feature_plot("Average Number of Bouts", "ZT hour", "delete", filter_experiment_time(df,num_hours=12), 'zt_time_hour', 'bout_behavior', draw_data=False, title=header_data['Behavior'][0], save_files=False)
-	plot_zt_bout_num_fig = zt_bout_num_fig + p9.stat_summary(p9.aes(x='zt_time_hour', y='bout_behavior',group='Unique_animal', color='Strain'), geom=p9.geom_line, fun_y=np.mean, alpha=0.5)
-	plot_zt_bout_num_fig.save(os.path.join(output_dir, f"individual_numbout_zt_{behavior}.svg"))
+	plot_zt_bout_num_fig = zt_bout_num_fig + p9.stat_summary(p9.aes(x='zt_time_hour', y='bout_behavior',group='Unique_animal', color='Strain'), geom=p9.geom_line, fun_y=np.mean, alpha=0.3) + \
+		p9.geom_vline(xintercept=12, linetype='dashed', alpha=0.5, color='red') + \
+		custom_theme + p9.labs(title=f"Individual Bout Numbers by ZT (n={n_arenas} arenas)")
+	try:
+		plot_zt_bout_num_fig.save(os.path.join(output_dir, f"individual_numbout_zt_{behavior}.svg"))
+	except Exception as e:
+		print(f"Error saving individual_numbout_zt_{behavior}.svg: {e}")
 
 	zt_bout_length_fig = generate_time_vs_feature_plot("Average Bout Length", "ZT hour", "delete", filter_experiment_time(df,num_hours=12),'zt_time_hour', 'avg_bout_length_sec', draw_data=False, title=header_data['Behavior'][0], save_files=False)
-	plot_zt_bout_length_fig = zt_bout_length_fig + p9.stat_summary(p9.aes(x='zt_time_hour', y='avg_bout_length_sec',group='Unique_animal', color='Strain'), geom=p9.geom_line, fun_y=np.mean, alpha=0.5)
-	plot_zt_bout_length_fig.save(os.path.join(output_dir, f"individual_boutlen_zt_{behavior}.svg"))
+	plot_zt_bout_length_fig = zt_bout_length_fig + p9.stat_summary(p9.aes(x='zt_time_hour', y='avg_bout_length_sec',group='Unique_animal', color='Strain'), geom=p9.geom_line, fun_y=np.mean, alpha=0.3) + \
+		p9.geom_vline(xintercept=12, linetype='dashed', alpha=0.5, color='red') + \
+		custom_theme + p9.labs(title=f"Individual Bout Lengths by ZT (n={n_arenas} arenas)")
+	try:
+		plot_zt_bout_length_fig.save(os.path.join(output_dir, f"individual_boutlen_zt_{behavior}.svg"))
+	except Exception as e:
+		print(f"Error saving individual_boutlen_zt_{behavior}.svg: {e}")
 
 
 def main(argv):
@@ -255,7 +317,7 @@ def main(argv):
 	parser.add_argument('--results_file', type=str, required=True, help='Path to the summary results CSV file')
 	parser.add_argument('--jmcrs_data', type=str, required=True, help='Path to the JCMS metadata file (Excel)')
 	parser.add_argument('--remove_experiments', type=str, default='', help='Comma-separated list of experiment IDs to remove (e.g., MDB0003,MDX0008)')
-	parser.add_argument('--output_dir', type=str, required=True, help='Output directory for all plot files (will be created if it doesn\'t exist)')
+	parser.add_argument('--output_dir', type=str, required=True, help='Output directory for all plot files (will be created if it does not already exist)')
 	args = parser.parse_args(argv)
 
 	remove_experiments = [x.strip() for x in args.remove_experiments.split(',') if x.strip()] if args.remove_experiments else []
