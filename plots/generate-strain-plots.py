@@ -1,9 +1,5 @@
 '''
 File for plotting generic plots for multi-day behavior
-
-# Run this line before starting up the interactive python session for accessing libraries
-# export PYTHONPATH=/JABS-postprocess/
-# Alternatively, now we can use the singularity image at /projects/kumar-lab/JABS/JABS-Postprocessing-2023-02-07.sif
 '''
 
 import pandas as pd
