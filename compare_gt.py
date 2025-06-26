@@ -147,6 +147,7 @@ def evaluate_ground_truth(args):
         p9.ggplot(melted_winning[melted_winning['variable'].isin(['pr', 're', 'f1'])], p9.aes(x='threshold', y='value', color='variable'))
         + p9.geom_line()
         + p9.theme_bw()
+        + p9.scale_y_continuous(limits=(0, 1))
     ).save(args.bout_output, height=6, width=12, dpi=300)
 
     if args.ethogram_output is not None:
