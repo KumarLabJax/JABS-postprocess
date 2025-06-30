@@ -1,7 +1,10 @@
 from __future__ import annotations
-from typing import Union, List
-from jabs_utils.features import JABSFeature
+
+from typing import List, Union
+
 import numpy as np
+
+from jabs_postprocess.utils.features import JABSFeature
 
 
 class Expression:

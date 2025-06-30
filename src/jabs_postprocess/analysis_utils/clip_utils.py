@@ -1,13 +1,14 @@
 """Utilities related to clipping and rendering data."""
 
-import imageio
-import h5py
-import cv2
 import os
-import numpy as np
-from typing import Optional, Union, Tuple, List
-from pathlib import Path
 import warnings
+from pathlib import Path
+from typing import List, Optional, Tuple, Union
+
+import cv2
+import h5py
+import imageio
+import numpy as np
 
 BEHAVIOR_COLORS = [
 	(77, 175, 74),   # green

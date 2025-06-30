@@ -1,9 +1,10 @@
-import pandas as pd
-import numpy as np
 import re
-import plotnine as p9
 import time
 from datetime import datetime
+
+import numpy as np
+import pandas as pd
+import plotnine as p9
 
 folder = '/media/bgeuther/Storage/TempStorage/SocialPaper/Play/analysis-2023-07-20/juveniles/'
 # These lists were generated via video names that exist on dropbox
