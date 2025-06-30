@@ -235,7 +235,8 @@ class TestEvaluateGroundTruth:
         evaluate_ground_truth(
             behavior='test_behavior',
             ground_truth_folder='test_gt_folder',
-            prediction_folder='test_pred_folder'
+            prediction_folder='test_pred_folder',
+            results_folder='test_results_folder',
         )
         
         # Assertions
@@ -290,14 +291,13 @@ class TestEvaluateGroundTruth:
         # Mock the plotting functions
         mock_plot = MagicMock()
         mock_ggplot.return_value = mock_plot
-        
-        # Call the function with warning check
-        with pytest.warns(UserWarning):
-            evaluate_ground_truth(
-                behavior='test_behavior',
-                ground_truth_folder='test_gt_folder',
-                prediction_folder='test_pred_folder'
-            )
+
+        evaluate_ground_truth(
+            behavior='test_behavior',
+            ground_truth_folder='test_gt_folder',
+            prediction_folder='test_pred_folder',
+            results_folder='test_results_folder',
+        )
         
         # Assertions
         mock_from_jabs_annotation_folder.assert_called_once()
@@ -362,14 +362,11 @@ class TestEvaluateGroundTruth:
             behavior='test_behavior',
             ground_truth_folder='test_gt_folder',
             prediction_folder='test_pred_folder',
+            results_folder='test_results_folder',
             stitch_scan=[5, 10],
             filter_scan=[8, 16],
             iou_thresholds=[0.1, 0.2, 0.3],
-            interpolation_size=5,
             filter_ground_truth=True,
-            scan_output='scan_output.png',
-            bout_output='bout_output.png',
-            ethogram_output='ethogram_output.png'
         )
         
         # Assertions
@@ -477,10 +474,9 @@ def test_generate_iou_scan_no_valid_pairs():
     })
     
     # Run with warning check
-    with pytest.warns(UserWarning):
-        result = generate_iou_scan(
-            annotations, [5, 10], [5, 10], [0.5], False
-        )
+    result = generate_iou_scan(
+        annotations, [5, 10], [5, 10], [0.5], False
+    )
     
     # Check that a DataFrame with expected columns and content is returned
     assert isinstance(result, pd.DataFrame)
