@@ -2,31 +2,43 @@
 
 ## Singularity Container
 
-This code contains a [singularity definition file](vm/JABS-postprocess.def) for assistance with installing the python environment. This environment supports both generating behavior table files and plotting the data in python.
+This code contains a [singularity definition file](vm/jabs-postprocess.def) for 
+assistance with installing the python environment. This environment supports both 
+generating behavior table files and plotting the data in python.
 
 Example building of the singularity image:
 
 ```
-cd vm
-singularity build --fakeroot ../../JABS-Postprocessing.sif JABS-postprocess.def
+singularity build --fakeroot jabs-postprocess.sif vm/jabs-postprocess.def
 ```
 
 ### Running Commands in Singularity
-When using the Singularity container, you can run commands directly using the `jabs-postprocess` command since the environment is set up with the script on your path:
+When using the Singularity container, the environment is set up with the command line 
+script on your path. You can run commands directly, with or without using the root
+`jabs-postprocess` command. 
 
 ```
-singularity run JABS-Postprocessing.sif jabs-postprocess COMMAND [OPTIONS]
+$ singularity run jabs-postprocess.sif --help
+
+Usage: jabs-postprocess [OPTIONS] COMMAND [ARGS]...                                                               
+                                                                                                                   
+╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --install-completion          Install completion for the current shell.                                         │
+│ --show-completion             Show completion for the current shell, to copy it or customize the installation.  │
+│ --help                        Show this message and exit.                                                       │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ transform-bouts-to-bins   Transform a bout file into a summary table.                                           │
+│ create-snippet            Create a video snippet from a JABS recording with optional behavior/pose rendering.   │
+│ evaluate-ground-truth     Evaluate classifier performance on densely annotated ground truth data.               │
+│ generate-tables           Generate behavior tables from JABS predictions.                                       │
+│ heuristic-classify        Process heuristic classification for behavior analysis.                               │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
 For example:
 ```
-singularity run JABS-Postprocessing.sif jabs-postprocess generate-tables --help
-```
-
-### `uv` Based Image
-The `uv` based singularity image should be built from the repository root.
-```
-singularity build JABS-postprocess-uv.sif vm/JABS-postprocess-uv.def
+singularity run jabs-Postprocessing.sif jabs-postprocess generate-tables --help
 ```
 
 ## Virtual Environment
