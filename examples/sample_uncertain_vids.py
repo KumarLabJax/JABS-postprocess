@@ -10,13 +10,13 @@ from typing import Optional, Union, List
 
 
 def sample_uncertain_videos(
-	input_video_folder: Union[str, Path],
+	input_video_folder: str | Path,
 	behavior: str,
-	output_video_folder: Union[str, Path],
+	output_video_folder: str | Path,
 	mode: str = 'bout',
 	pad_length: int = 30,
-	longest_bouts: Optional[int] = None,
-	shortest_bouts: Optional[int] = None,
+	longest_bouts: int | None = None,
+	shortest_bouts: int | None = None,
 	overlay_behavior: bool = False,
 	threshold: float = 0.5,
 	tolerance: float = 0.1,

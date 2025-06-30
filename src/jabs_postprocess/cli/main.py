@@ -103,48 +103,34 @@ def evaluate_ground_truth(
         help="List of filter (minimum duration in frames to consider real) values to test"
     ),
     iou_thresholds: List[float] = typer.Option(
-        np.arange(0.05, 1.01, 0.05).tolist(), 
-        help="List of intersection over union thresholds to scan"
+        np.round(np.arange(0.05, 1.01, 0.05), 2).tolist(),
+        help="List of intersection over union thresholds to scan (will be rounded to 2 decimal places)."
     ),
     interpolation_size: int = typer.Option(0, help="Number of frames to interpolate missing data"),
     filter_ground_truth: bool = typer.Option(False, help="Apply filters to ground truth data (default is only to filter predictions)"),
-    scan_output: Optional[Path] = typer.Option(None, help="Output file to save the filter scan performance plot"),
-    bout_output: Optional[Path] = typer.Option(None, help="Output file to save the resulting bout performance plot"),
     trim_time: Optional[int] = typer.Option(None, help="Limit the duration in frames of videos for performance (e.g. only the first 2 minutes of a 10 minute video were densely annotated)"),
-    ethogram_output: Optional[Path] = typer.Option(None, help="Output file to save the ethogram plot comparing GT and predictions"),
+    results_folder: Path = typer.Option(Path.cwd() / "results", help="Output folder to save all the result plots and CSVs.")
 ):
     """Evaluate classifier performance on densely annotated ground truth data."""
-    
+
     # Validation
     if not ground_truth_folder.exists():
         raise typer.BadParameter(f"Ground truth folder does not exist: {ground_truth_folder}")
     if not prediction_folder.exists():
         raise typer.BadParameter(f"Prediction folder does not exist: {prediction_folder}")
-    if not scan_output and not bout_output and not ethogram_output:
-        typer.echo('Neither scan, bout, nor ethogram outputs were selected, nothing to do. Please use --scan_output, --bout_output, or --ethogram_output.')
-        raise typer.Exit()
-    
-    # Convert Path objects to strings where needed
-    ground_truth_folder_str = str(ground_truth_folder)
-    prediction_folder_str = str(prediction_folder)
-    scan_output_str = str(scan_output) if scan_output else None
-    bout_output_str = str(bout_output) if bout_output else None
-    ethogram_output_str = str(ethogram_output) if ethogram_output else None
-    
+
     # Call the refactored function with individual parameters
     compare_gt.evaluate_ground_truth(
         behavior=behavior,
-        ground_truth_folder=ground_truth_folder_str,
-        prediction_folder=prediction_folder_str,
+        ground_truth_folder=ground_truth_folder,
+        prediction_folder=prediction_folder,
+        results_folder=results_folder,
         stitch_scan=stitch_scan,
         filter_scan=filter_scan,
         iou_thresholds=iou_thresholds,
         interpolation_size=interpolation_size,
         filter_ground_truth=filter_ground_truth,
-        scan_output=scan_output_str,
-        bout_output=bout_output_str,
         trim_time=trim_time,
-        ethogram_output=ethogram_output_str,
     )
 
 @app.command()

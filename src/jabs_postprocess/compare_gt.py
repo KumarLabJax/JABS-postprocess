@@ -1,7 +1,8 @@
 """Associated lines of code that deal with the comparison of predictions (from classify.py) and GT annotation (from a JABS project)."""
 
-import warnings
+import logging
 from typing import List, Optional
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -15,19 +16,19 @@ from jabs_postprocess.utils.project_utils import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 def evaluate_ground_truth(
     behavior: str,
-    ground_truth_folder: str,
-    prediction_folder: str,
+    ground_truth_folder: Path,
+    prediction_folder: Path,
+    results_folder: Path,
     stitch_scan: List[float] = None,
     filter_scan: List[float] = None,
     iou_thresholds: List[float] = None,
-    interpolation_size: int = 0,
     filter_ground_truth: bool = False,
-    scan_output: Optional[str] = None,
-    bout_output: Optional[str] = None,
     trim_time: Optional[int] = None,
-    ethogram_output: Optional[str] = None,
 ):
     """Main function for evaluating ground truth annotations against classifier predictions.
 
@@ -35,16 +36,19 @@ def evaluate_ground_truth(
         behavior: Behavior to evaluate predictions
         ground_truth_folder: Path to the JABS project which contains densely annotated ground truth data
         prediction_folder: Path to the folder where behavior predictions were made
+        results_folder: Output folder to save all the result plots and CSVs
         stitch_scan: List of stitching (time gaps in frames to merge bouts together) values to test
         filter_scan: List of filter (minimum duration in frames to consider real) values to test
         iou_thresholds: List of intersection over union thresholds to scan
-        interpolation_size: Number of frames to interpolate missing data
         filter_ground_truth: Apply filters to ground truth data (default is only to filter predictions)
         scan_output: Output file to save the filter scan performance plot
         bout_output: Output file to save the resulting bout performance plot
         trim_time: Limit the duration in frames of videos for performance
         ethogram_output: Output file to save the ethogram plot comparing GT and predictions
+        scan_csv_output: Output file to save the scan performance data as CSV
     """
+    ouput_paths = generate_output_paths(results_folder)
+
     # Set default values if not provided
     stitch_scan = stitch_scan or np.arange(5, 46, 5).tolist()
     filter_scan = filter_scan or np.arange(5, 46, 5).tolist()
@@ -88,7 +92,7 @@ def evaluate_ground_truth(
                 'duration': video_duration,
                 'is_behavior': 0,  # 0 = not-behavior
             })
-            warnings.warn(f"No GT annotations found for {row['video_name']} (animal {row['animal_idx']}). "
+            logger.warning(f"No GT annotations found for {row['video_name']} (animal {row['animal_idx']}). "
                          f"Creating dummy GT entry as 'not-behavior' for the entire video ({video_duration} frames).")
     
     # 5. Add the dummy GT entries to the original GT dataframe
@@ -108,36 +112,32 @@ def evaluate_ground_truth(
     
     # TODO: Trim time?
     if trim_time is not None:
-        warnings.warn('Time trimming is not currently supported, ignoring.')
+        logger.warning('Time trimming is not currently supported, ignoring.')
 
     performance_df = generate_iou_scan(performance_annotations, stitch_scan, filter_scan, iou_thresholds, filter_ground_truth)
+
+    if performance_df.empty:
+        logger.warning("No performance data to analyze. Skipping plots and CSV generation.")
+        raise ValueError("No performance data to analyze. Ensure that the ground truth and predictions are correctly formatted and contain valid bouts.")
+
+    if ouput_paths['scan_csv'] is not None:
+        performance_df.to_csv(ouput_paths['scan_csv'], index=False)
+        logging.info(f"Scan performance data saved to {ouput_paths['scan_csv']}")
+
     melted_df = pd.melt(performance_df, id_vars=["threshold", "stitch", "filter"])
 
-    # Get the best f1 score filtering parameters for each thresholds
-    # optimal_filter_df = performance_df.groupby(['threshold']).apply(lambda x: x.iloc[np.nanargmax(x['f1'].values)] if np.any(~np.isnan(x['f1'].values)) else x.iloc[0]).reset_index(drop=True)
-
-    # Prototyping plot to show the relationship between threshold and optimal parameters
-    # filter_selection_plot = (
-    #     p9.ggplot(optimal_filter_df)
-    #     + p9.geom_point(p9.aes(x='threshold', y='f1'), color='red')
-    #     + p9.geom_point(p9.aes(x='threshold', y='stitch/np.max(stitch)'), color='blue')
-    #     + p9.geom_point(p9.aes(x='threshold', y='filter/np.max(filter)'), color='green')
-    #     + p9.theme_bw()
-    # )
-
     middle_threshold = np.sort(iou_thresholds)[int(np.floor(len(iou_thresholds) / 2))]
-
 
     # Create a copy to avoid SettingWithCopyWarning
     subset_df = performance_df[performance_df['threshold'] == middle_threshold].copy()
     
     # Handle empty DataFrame case
     if subset_df.empty:
-        warnings.warn(f"No performance data available for threshold {middle_threshold}.")
+        logger.warning(f"No performance data available for threshold {middle_threshold}.")
         # Create an empty plot
         plot = p9.ggplot() + p9.theme_bw() + p9.labs(title=f'No performance data for {middle_threshold} IoU')
-        if scan_output:
-            plot.save(scan_output, height=6, width=12, dpi=300)
+        if ouput_paths['scan_plot']:
+            plot.save(ouput_paths['scan_plot'], height=6, width=12, dpi=300)
         # Create default winning filters with first values from scan parameters
         winning_filters = pd.DataFrame({
             'stitch': [stitch_scan[0] if stitch_scan else 0],
@@ -183,8 +183,8 @@ def evaluate_ground_truth(
             + p9.scale_fill_continuous(na_value=0)
         )
 
-        if scan_output:
-            plot.save(scan_output, height=6, width=12, dpi=300)
+        if ouput_paths['scan_plot']:
+            plot.save(ouput_paths['scan_plot'], height=6, width=12, dpi=300)
 
         # Handle case where all f1_plot values are NaN or empty
         if subset_df['f1_plot'].isna().all() or len(subset_df) == 0:
@@ -199,17 +199,21 @@ def evaluate_ground_truth(
         else:
             winning_filters = pd.DataFrame(subset_df.iloc[np.argmax(subset_df['f1_plot'])]).T.reset_index(drop=True)[['stitch', 'filter']]
 
-    if 'melted_winning' not in locals():
-        melted_winning = pd.concat([melted_df[(melted_df[['stitch', 'filter']] == row).all(axis='columns')] for _, row in winning_filters.iterrows()])
+    winning_bout_df = pd.merge(performance_df, winning_filters, on=['stitch', 'filter'])
+    if ouput_paths['bout_csv'] is not None:
+        winning_bout_df.to_csv(ouput_paths['bout_csv'], index=False)
+        logging.info(f"Bout performance data saved to {ouput_paths['bout_csv']}")
 
-    if bout_output:
-        (
-            p9.ggplot(melted_winning[melted_winning['variable'].isin(['pr', 're', 'f1'])], p9.aes(x='threshold', y='value', color='variable'))
-            + p9.geom_line()
-            + p9.theme_bw()
-        ).save(bout_output, height=6, width=12, dpi=300)
+    melted_winning = pd.melt(winning_bout_df, id_vars=['threshold', 'stitch', 'filter'])
 
-    if ethogram_output is not None:
+    (
+        p9.ggplot(melted_winning[melted_winning['variable'].isin(['pr', 're', 'f1'])], p9.aes(x='threshold', y='value', color='variable'))
+        + p9.geom_line()
+        + p9.theme_bw()
+        + p9.scale_y_continuous(limits=(0, 1))
+    ).save(ouput_paths['bout_plot'], height=6, width=12, dpi=300)
+
+    if ouput_paths['ethogram'] is not None:
         # Prepare data for ethogram plot
         # Use all_annotations to include both behavior (1) and not-behavior (0) states
         plot_df = all_annotations.copy()
@@ -243,14 +247,14 @@ def evaluate_ground_truth(
                         p9.expand_limits(x=0)  # start x-axis at 0
                     )
                     # Adjust height based on the number of unique animal-video combinations
-                    ethogram_plot.save(ethogram_output, height=1.5 * num_unique_combos + 2, width=12, dpi=300, limitsize=False, verbose=False)
-                    print(f"Ethogram plot saved to {ethogram_output}")
+                    ethogram_plot.save(ouput_paths['ethogram'], height=1.5 * num_unique_combos + 2, width=12, dpi=300, limitsize=False, verbose=False)
+                    logging.info(f"Ethogram plot saved to {ouput_paths['ethogram']}")
                 else:
-                    warnings.warn(f"No behavior instances found for behavior {behavior} after filtering for ethogram.")
+                    logger.warning(f"No behavior instances found for behavior {behavior} after filtering for ethogram.")
             else:
-                warnings.warn(f"No data to plot for behavior {behavior} after filtering for ethogram.")
+                logger.warning(f"No data to plot for behavior {behavior} after filtering for ethogram.")
         else:
-            warnings.warn(f"No annotations found for behavior {behavior} to generate ethogram plot.")
+            logger.warning(f"No annotations found for behavior {behavior} to generate ethogram plot.")
 
 
 def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan, filter_ground_truth: bool = False) -> pd.DataFrame:
@@ -266,13 +270,16 @@ def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan,
     Returns:
         pd.DataFrame containing performance across all combinations of the scan
     """
+    # Ensure thresholds are rounded to 2 decimal places
+    threshold_scan = np.round(threshold_scan, 2)
+
     # Loop over the animals
     performance_df = []
     for (cur_animal, cur_video), animal_df in all_annotations.groupby(['animal_idx', 'video_name']):
         # For each animal, we want a matrix of intersections, unions, and ious
         pr_df = animal_df[~animal_df['is_gt']]
         if len(pr_df) == 0:
-            warnings.warn(f'No predictions for {cur_animal} in {cur_video}... skipping.')
+            logger.warning(f'No predictions for {cur_animal} in {cur_video}... skipping.')
             continue
         pr_obj = Bouts(pr_df['start'], pr_df['duration'], pr_df['is_behavior'])
         gt_df = animal_df[animal_df['is_gt']]
@@ -308,7 +315,7 @@ def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan,
                 performance_df.append(pd.DataFrame(new_performance))
 
     if not performance_df:
-        warnings.warn(f"No valid ground truth and prediction pairs found for behavior across all files. Cannot generate performance metrics.")
+        logger.warning(f"No valid ground truth and prediction pairs found for behavior across all files. Cannot generate performance metrics.")
         # Return an empty DataFrame with expected columns to prevent downstream errors
         return pd.DataFrame(columns=['stitch', 'filter', 'threshold', 'tp', 'fn', 'fp', 'pr', 're', 'f1'])
 
@@ -321,3 +328,23 @@ def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan,
     performance_df['f1'] = 2 * (performance_df['pr'] * performance_df['re']) / (performance_df['pr'] + performance_df['re'])
 
     return performance_df
+
+def generate_output_paths(results_folder: Path):
+    """
+    Generates output paths for scan and bout performance results.
+
+    Args:
+        results_folder: Path to the folder where results will be saved.
+    Returns:
+        A dictionary with keys 'scan_csv', 'bout_csv', 'ethogram', 'scan_plot', and 'bout_plot' containing the respective output paths.
+    """
+    results_folder = Path(results_folder)
+    results_folder.mkdir(parents=True, exist_ok=True)
+
+    return {
+        'scan_csv': results_folder / 'scan_performance.csv',
+        'bout_csv': results_folder / 'bout_performance.csv',
+        'ethogram': results_folder / 'ethogram.png',
+        'scan_plot': results_folder / 'scan_performance.png',
+        'bout_plot': results_folder / 'bout_performance.png'
+    }
