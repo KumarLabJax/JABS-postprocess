@@ -128,7 +128,7 @@ def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experimen
 		# Detect the time datatype
 		col_types = df.dtypes
 		df_copy = pd.DataFrame.copy(df)
-		if not pd.api.types.is_categorical_dtype(col_types[factor]):
+		if not isinstance(col_types[factor], pd.CategoricalDtype):
 			df_copy[factor] = df_copy[factor].astype('category')
 		# Make a custom df for the lights block
 		light_df = df.groupby([time,factor])[[feature,'lights_on']].mean().reset_index()
@@ -162,7 +162,7 @@ def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experimen
 		else:
 			plot = plot + p9.labs(color=factor, y=feature)
 		plot = plot + p9.scale_color_brewer(type='qual', palette='Set1')
-		plot = plot + p9.scale_fill_brewer(type='qual', palette='Set1', guide=False)
+		plot = plot + p9.scale_fill_brewer(type='qual', palette='Set1') + p9.guides(fill=None)
 		if save_files:
 			try:
 				plot.save(os.path.join(output_dir, f'{outfile}_{behavior}.svg'))
@@ -207,7 +207,7 @@ def generate_behavior_plots(behavior, results_file, jmcrs_data, remove_experimen
 		p9.labs(title=f'{behavior} Behavior by Room and Strain (Males Only, n={len(df_males["ExptNumber"].unique())} arenas)', 
 				x='Zeitgeber Time (hours)', y='Average Number of Bouts') + \
 		p9.scale_color_brewer(type='qual', palette='Set1') + \
-		p9.scale_fill_brewer(type='qual', palette='Set1', guide=False)
+		p9.scale_fill_brewer(type='qual', palette='Set1') + p9.guides(fill=None)
 	try:
 		room_plot.save(os.path.join(output_dir, f'room_comp_numbouts_{behavior}.svg'))
 	except Exception as e:
