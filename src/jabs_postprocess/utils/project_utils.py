@@ -526,7 +526,7 @@ class Table:
         return self._data
 
     @classmethod
-    def combine_data(cls, data_list: List(Table)):
+    def combine_data(cls, data_list: List[Table]):
         """Combines multiple data tables together.
 
         Args:
@@ -1138,7 +1138,7 @@ class Prediction(BoutTable):
         return cls(settings, bout_df, video_metadata)
 
     @classmethod
-    def combine_data(cls, data_list: List(Table)):
+    def combine_data(cls, data_list: List[Table]):
         """Combines multiple prediction tables together.
 
         Args:

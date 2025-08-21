@@ -2,6 +2,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Annotated, List, Optional
 
+import pandas as pd
 import numpy as np
 import typer
 
@@ -327,6 +328,145 @@ def heuristic_classify(
         stitch_gap=stitch_gap,
         min_bout_length=min_bout_length,
     )
+
+
+@app.command()
+def merge_tables(
+    input_tables: Annotated[
+        List[Path],
+        typer.Option(
+            help="Paths to behavior table files to merge (must be same behavior and table type)"
+        ),
+    ],
+    output_prefix: Annotated[
+        str,
+        typer.Option(help="File prefix for merged output table"),
+    ] = "merged_behavior",
+    overwrite: Annotated[bool, typer.Option(help="Overwrites output files")] = False,
+):
+    """Merge multiple behavior tables of the same type and behavior.
+
+    This command merges behavior tables that contain the same behavior data,
+    combining them into a single consolidated table while preserving header information.
+    """
+    if not input_tables:
+        typer.echo("Error: No input tables provided.")
+        raise typer.Exit(1)
+
+    # Validate all input files exist
+    for table_path in input_tables:
+        if not table_path.exists():
+            typer.echo(f"Error: Input table not found: {table_path}")
+            raise typer.Exit(1)
+
+    try:
+        output_file, _ = generate_behavior_tables.merge_behavior_tables(
+            input_tables=input_tables,
+            output_prefix=output_prefix,
+            overwrite=overwrite,
+        )
+
+        typer.echo(f"Successfully merged {len(input_tables)} tables:")
+        for table in input_tables:
+            typer.echo(f"  - {table}")
+        typer.echo(f"Output saved to: {output_file}")
+
+    except FileExistsError as e:
+        typer.echo(f"Error: {str(e)}")
+        typer.echo("Use --overwrite to force overwrite.")
+        raise typer.Exit(1)
+    except ValueError as e:
+        typer.echo(f"Error: {str(e)}")
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Unexpected error: {str(e)}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def merge_multiple_tables(
+    table_folder: Annotated[
+        Path,
+        typer.Option(
+            help="Folder containing behavior table files to merge, grouped by behavior"
+        ),
+    ],
+    behaviors: Annotated[
+        Optional[List[str]],
+        typer.Option(help="Specific behaviors to merge (default: auto-detect all)"),
+    ] = None,
+    table_pattern: Annotated[
+        str,
+        typer.Option(help="File pattern to match behavior tables"),
+    ] = "*.csv",
+    output_prefix: Annotated[
+        str,
+        typer.Option(help="File prefix for merged output tables"),
+    ] = "merged_behavior",
+    overwrite: Annotated[bool, typer.Option(help="Overwrites output files")] = False,
+):
+    """Merge multiple sets of behavior tables, automatically grouping by behavior.
+
+    This command scans a folder for behavior table files, groups them by behavior name,
+    and merges each group separately. Useful for combining results from multiple experiments.
+    """
+    if not table_folder.exists():
+        typer.echo(f"Error: Table folder not found: {table_folder}")
+        raise typer.Exit(1)
+
+    # Find all table files matching the pattern
+    table_files = list(table_folder.glob(table_pattern))
+    if not table_files:
+        typer.echo(
+            f"Error: No table files found matching pattern '{table_pattern}' in {table_folder}"
+        )
+        raise typer.Exit(1)
+
+    # Group tables by behavior (extract from filename or header)
+    table_groups = {}
+    for table_file in table_files:
+        try:
+            header_data = pd.read_csv(table_file, nrows=1)
+            behavior_name = header_data["Behavior"][0]
+
+            # Filter by requested behaviors if specified
+            if behaviors and behavior_name not in behaviors:
+                continue
+
+            if behavior_name not in table_groups:
+                table_groups[behavior_name] = []
+            table_groups[behavior_name].append(table_file)
+
+        except (KeyError, pd.errors.EmptyDataError, Exception):
+            typer.echo(f"Warning: Could not read behavior from {table_file}, skipping.")
+            continue
+
+    if not table_groups:
+        typer.echo("Error: No valid behavior tables found to merge.")
+        raise typer.Exit(1)
+
+    try:
+        results = generate_behavior_tables.merge_multiple_behavior_tables(
+            table_groups=table_groups,
+            output_prefix=output_prefix,
+            overwrite=overwrite,
+        )
+
+        typer.echo(f"Successfully merged tables for {len(results)} behaviors:")
+        for behavior_name, (bout_file, bin_file) in results.items():
+            typer.echo(f"  {behavior_name}:")
+            if bout_file:
+                typer.echo(f"    Bout table: {bout_file}")
+            if bin_file:
+                typer.echo(f"    Bin table: {bin_file}")
+
+    except FileExistsError as e:
+        typer.echo(f"Error: {str(e)}")
+        typer.echo("Use --overwrite to force overwrite.")
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Unexpected error: {str(e)}")
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":
