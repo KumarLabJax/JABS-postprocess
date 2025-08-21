@@ -87,7 +87,7 @@ def test_process_behavior_tables_default_params(mock_project):
         # Assert
         mock_settings.assert_called_once_with("grooming", None, None, None)
         mock_from_folder.assert_called_once_with(
-            "/path/to/project", mock_settings.return_value, None
+            Path("/path/to/project"), mock_settings.return_value, None
         )
         mock_project.get_bouts.assert_called_once()
         mock_project.get_bouts.return_value.to_file.assert_called_once_with(
@@ -139,7 +139,7 @@ def test_process_behavior_tables_custom_params(mock_project):
         # Assert
         mock_settings.assert_called_once_with("walking", 5, 3, 10)
         mock_from_folder.assert_called_once_with(
-            "/path/to/project", mock_settings.return_value, "/custom/features"
+            Path("/path/to/project"), mock_settings.return_value, Path("/custom/features")
         )
         mock_project.get_bouts.assert_called_once()
         mock_project.get_bouts.return_value.to_file.assert_called_once_with(
@@ -251,7 +251,7 @@ def test_process_behavior_tables_error_during_processing(mock_project):
             [{"behavior": "grooming"}],
             [
                 {
-                    "project_folder": "/path/to/project",
+                    "project_folder": Path("/path/to/project"),
                     "behavior": "grooming",
                     "out_prefix": "behavior",
                     "out_bin_size": 60,
@@ -271,7 +271,7 @@ def test_process_behavior_tables_error_during_processing(mock_project):
             ],
             [
                 {
-                    "project_folder": "/path/to/project",
+                    "project_folder": Path("/path/to/project"),
                     "behavior": "grooming",
                     "out_prefix": "behavior",
                     "out_bin_size": 60,
@@ -282,7 +282,7 @@ def test_process_behavior_tables_error_during_processing(mock_project):
                     "overwrite": False,
                 },
                 {
-                    "project_folder": "/path/to/project",
+                    "project_folder": Path("/path/to/project"),
                     "behavior": "walking",
                     "out_prefix": "behavior",
                     "out_bin_size": 60,
@@ -305,7 +305,7 @@ def test_process_behavior_tables_error_during_processing(mock_project):
             ],
             [
                 {
-                    "project_folder": "/path/to/project",
+                    "project_folder": Path("/path/to/project"),
                     "behavior": "grooming",
                     "out_prefix": "behavior",
                     "out_bin_size": 60,
@@ -316,7 +316,7 @@ def test_process_behavior_tables_error_during_processing(mock_project):
                     "overwrite": False,
                 },
                 {
-                    "project_folder": "/path/to/project",
+                    "project_folder": Path("/path/to/project"),
                     "behavior": "walking",
                     "out_prefix": "behavior",
                     "out_bin_size": 60,
@@ -327,7 +327,7 @@ def test_process_behavior_tables_error_during_processing(mock_project):
                     "overwrite": False,
                 },
                 {
-                    "project_folder": "/path/to/project",
+                    "project_folder": Path("/path/to/project"),
                     "behavior": "feeding",
                     "out_prefix": "behavior",
                     "out_bin_size": 60,
@@ -426,14 +426,14 @@ def test_process_multiple_behaviors_custom_params(mock_find_behaviors):
         for i, behavior in enumerate(behaviors):
             assert (
                 mock_process.call_args_list[i][1]["project_folder"]
-                == "/path/to/project"
+                == Path("/path/to/project")
             )
             assert mock_process.call_args_list[i][1]["behavior"] == behavior["behavior"]
             assert mock_process.call_args_list[i][1]["out_prefix"] == "custom"
             assert mock_process.call_args_list[i][1]["out_bin_size"] == 120
             assert (
                 mock_process.call_args_list[i][1]["feature_folder"]
-                == "/custom/features"
+                == Path("/custom/features")
             )
             assert mock_process.call_args_list[i][1]["overwrite"] is True
 
