@@ -53,211 +53,309 @@ def evaluate_ground_truth(
     stitch_scan = stitch_scan or np.arange(5, 46, 5).tolist()
     filter_scan = filter_scan or np.arange(5, 46, 5).tolist()
     iou_thresholds = iou_thresholds or np.arange(0.05, 1.01, 0.05).tolist()
-    
+
     gt_df = BoutTable.from_jabs_annotation_folder(ground_truth_folder, behavior)._data
     # Settings to read in the unfiltered data
     dummy_settings = ClassifierSettings(behavior, 0, 0, 0)
-    pred_df = JabsProject.from_prediction_folder(prediction_folder, dummy_settings).get_bouts()._data
+    pred_df = (
+        JabsProject.from_prediction_folder(prediction_folder, dummy_settings)
+        .get_bouts()
+        ._data
+    )
 
     # Add dummy GT entries for videos present in predictions but missing from GT annotations
     # This ensures videos with no GT annotations (meaning "no behavior occurred") are properly represented
-    
+
     # 1. Get all unique videos and animals from predictions
-    pred_videos = pred_df[['video_name', 'animal_idx']].drop_duplicates()
-    
+    pred_videos = pred_df[["video_name", "animal_idx"]].drop_duplicates()
+
     # 2. Get all unique videos and animals from GT
-    gt_videos = gt_df[['video_name', 'animal_idx']].drop_duplicates() if not gt_df.empty else pd.DataFrame(columns=['video_name', 'animal_idx'])
-    
+    gt_videos = (
+        gt_df[["video_name", "animal_idx"]].drop_duplicates()
+        if not gt_df.empty
+        else pd.DataFrame(columns=["video_name", "animal_idx"])
+    )
+
     # 3. Find videos/animals in predictions but not in GT
-    missing_gt = pred_videos.merge(gt_videos, on=['video_name', 'animal_idx'], how='left', indicator=True)
-    missing_gt = missing_gt[missing_gt['_merge'] == 'left_only'].drop('_merge', axis=1)
-    
+    missing_gt = pred_videos.merge(
+        gt_videos, on=["video_name", "animal_idx"], how="left", indicator=True
+    )
+    missing_gt = missing_gt[missing_gt["_merge"] == "left_only"].drop("_merge", axis=1)
+
     # 4. For each missing video/animal, create a dummy GT entry representing "all not-behavior"
     dummy_gt_rows = []
     for _, row in missing_gt.iterrows():
         # Find the corresponding prediction data for this video/animal to get duration
-        pred_subset = pred_df[(pred_df['video_name'] == row['video_name']) & 
-                             (pred_df['animal_idx'] == row['animal_idx'])]
-        
+        pred_subset = pred_df[
+            (pred_df["video_name"] == row["video_name"])
+            & (pred_df["animal_idx"] == row["animal_idx"])
+        ]
+
         if not pred_subset.empty:
             # Calculate the full video duration from the predictions
             # This assumes predictions cover the entire video
-            video_duration = int(pred_subset['start'].max() + pred_subset['duration'].max())
-            
+            video_duration = int(
+                pred_subset["start"].max() + pred_subset["duration"].max()
+            )
+
             # Create a dummy GT entry: one bout covering the entire video, marked as not-behavior (0)
-            dummy_gt_rows.append({
-                'video_name': row['video_name'],
-                'animal_idx': row['animal_idx'],
-                'start': 0,
-                'duration': video_duration,
-                'is_behavior': 0,  # 0 = not-behavior
-            })
-            logger.warning(f"No GT annotations found for {row['video_name']} (animal {row['animal_idx']}). "
-                         f"Creating dummy GT entry as 'not-behavior' for the entire video ({video_duration} frames).")
-    
+            dummy_gt_rows.append(
+                {
+                    "video_name": row["video_name"],
+                    "animal_idx": row["animal_idx"],
+                    "start": 0,
+                    "duration": video_duration,
+                    "is_behavior": 0,  # 0 = not-behavior
+                }
+            )
+            logger.warning(
+                f"No GT annotations found for {row['video_name']} (animal {row['animal_idx']}). "
+                f"Creating dummy GT entry as 'not-behavior' for the entire video ({video_duration} frames)."
+            )
+
     # 5. Add the dummy GT entries to the original GT dataframe
     if dummy_gt_rows:
         dummy_gt_df = pd.DataFrame(dummy_gt_rows)
         gt_df = pd.concat([gt_df, dummy_gt_df], ignore_index=True)
 
-    gt_df['is_gt'] = True
-    pred_df['is_gt'] = False
+    gt_df["is_gt"] = True
+    pred_df["is_gt"] = False
     all_annotations = pd.concat([gt_df, pred_df])
-    
+
     # We only want the positive examples for performance evaluation
     # (but for ethogram plotting later, we'll use the full all_annotations)
-    performance_annotations = all_annotations[all_annotations['is_behavior'] == 1].copy()
+    performance_annotations = all_annotations[
+        all_annotations["is_behavior"] == 1
+    ].copy()
     if not performance_annotations.empty:
-        performance_annotations['behavior'] = behavior
-    
+        performance_annotations["behavior"] = behavior
+
     # TODO: Trim time?
     if trim_time is not None:
-        logger.warning('Time trimming is not currently supported, ignoring.')
+        logger.warning("Time trimming is not currently supported, ignoring.")
 
-    performance_df = generate_iou_scan(performance_annotations, stitch_scan, filter_scan, iou_thresholds, filter_ground_truth)
+    performance_df = generate_iou_scan(
+        performance_annotations,
+        stitch_scan,
+        filter_scan,
+        iou_thresholds,
+        filter_ground_truth,
+    )
 
     if performance_df.empty:
-        logger.warning("No performance data to analyze. Skipping plots and CSV generation.")
-        raise ValueError("No performance data to analyze. Ensure that the ground truth and predictions are correctly formatted and contain valid bouts.")
+        logger.warning(
+            "No performance data to analyze. Skipping plots and CSV generation."
+        )
+        raise ValueError(
+            "No performance data to analyze. Ensure that the ground truth and predictions are correctly formatted and contain valid bouts."
+        )
 
-    if ouput_paths['scan_csv'] is not None:
-        performance_df.to_csv(ouput_paths['scan_csv'], index=False)
+    if ouput_paths["scan_csv"] is not None:
+        performance_df.to_csv(ouput_paths["scan_csv"], index=False)
         logging.info(f"Scan performance data saved to {ouput_paths['scan_csv']}")
 
-    melted_df = pd.melt(performance_df, id_vars=["threshold", "stitch", "filter"])
+    _melted_df = pd.melt(performance_df, id_vars=["threshold", "stitch", "filter"])
 
     middle_threshold = np.sort(iou_thresholds)[int(np.floor(len(iou_thresholds) / 2))]
 
     # Create a copy to avoid SettingWithCopyWarning
-    subset_df = performance_df[performance_df['threshold'] == middle_threshold].copy()
-    
+    subset_df = performance_df[performance_df["threshold"] == middle_threshold].copy()
+
     # Handle empty DataFrame case
     if subset_df.empty:
-        logger.warning(f"No performance data available for threshold {middle_threshold}.")
+        logger.warning(
+            f"No performance data available for threshold {middle_threshold}."
+        )
         # Create an empty plot
-        plot = p9.ggplot() + p9.theme_bw() + p9.labs(title=f'No performance data for {middle_threshold} IoU')
-        if ouput_paths['scan_plot']:
-            plot.save(ouput_paths['scan_plot'], height=6, width=12, dpi=300)
+        plot = (
+            p9.ggplot()
+            + p9.theme_bw()
+            + p9.labs(title=f"No performance data for {middle_threshold} IoU")
+        )
+        if ouput_paths["scan_plot"]:
+            plot.save(ouput_paths["scan_plot"], height=6, width=12, dpi=300)
         # Create default winning filters with first values from scan parameters
-        winning_filters = pd.DataFrame({
-            'stitch': [stitch_scan[0] if stitch_scan else 0],
-            'filter': [filter_scan[0] if filter_scan else 0]
-        })
+        winning_filters = pd.DataFrame(
+            {
+                "stitch": [stitch_scan[0] if stitch_scan else 0],
+                "filter": [filter_scan[0] if filter_scan else 0],
+            }
+        )
     else:
         # Convert numeric columns to float to ensure continuous scale
-        subset_df['stitch'] = subset_df['stitch'].astype(float)
-        subset_df['filter'] = subset_df['filter'].astype(float)
-        
+        subset_df["stitch"] = subset_df["stitch"].astype(float)
+        subset_df["filter"] = subset_df["filter"].astype(float)
+
         # Handle NaN values in f1 by replacing with 0 for plotting purposes
-        subset_df['f1_plot'] = subset_df['f1'].fillna(0)
-        
+        subset_df["f1_plot"] = subset_df["f1"].fillna(0)
+
         # Convert f1 values to strings for labels
-        subset_df['f1_label'] = subset_df['f1'].apply(lambda x: f"{x:.2f}" if not pd.isna(x) else "NA")
-        
+        subset_df["f1_label"] = subset_df["f1"].apply(
+            lambda x: f"{x:.2f}" if not pd.isna(x) else "NA"
+        )
+
         # Create the plot with explicit scale types and proper handling of NaN values
         plot = (
             p9.ggplot(subset_df)
-            + p9.geom_tile(p9.aes(x='stitch', y='filter', fill='f1_plot'))
-            + p9.geom_text(p9.aes(x='stitch', y='filter', label='f1_label'), color='black', size=2)
+            + p9.geom_tile(p9.aes(x="stitch", y="filter", fill="f1_plot"))
+            + p9.geom_text(
+                p9.aes(x="stitch", y="filter", label="f1_label"), color="black", size=2
+            )
             + p9.theme_bw()
-            + p9.labs(title=f'Performance at {middle_threshold} IoU')
+            + p9.labs(title=f"Performance at {middle_threshold} IoU")
         )
 
         # Add the star point only if we have valid f1 scores
-        if not subset_df['f1_plot'].isna().all() and len(subset_df['f1_plot']) > 0:
-            best_idx = np.argmax(subset_df['f1_plot'])
-            best_point = pd.DataFrame(subset_df.iloc[best_idx:best_idx+1])
-            plot = plot + p9.geom_point(best_point, p9.aes(x='stitch', y='filter'), shape='*', size=3, color='white')
+        if not subset_df["f1_plot"].isna().all() and len(subset_df["f1_plot"]) > 0:
+            best_idx = np.argmax(subset_df["f1_plot"])
+            best_point = pd.DataFrame(subset_df.iloc[best_idx : best_idx + 1])
+            plot = plot + p9.geom_point(
+                best_point,
+                p9.aes(x="stitch", y="filter"),
+                shape="*",
+                size=3,
+                color="white",
+            )
 
         # Add scales with explicit breaks
         plot = (
             plot
             + p9.scale_x_continuous(
-                breaks=sorted(subset_df['stitch'].unique()),
-                labels=[str(int(x)) for x in sorted(subset_df['stitch'].unique())]
+                breaks=sorted(subset_df["stitch"].unique()),
+                labels=[str(int(x)) for x in sorted(subset_df["stitch"].unique())],
             )
             + p9.scale_y_continuous(
-                breaks=sorted(subset_df['filter'].unique()),
-                labels=[str(int(x)) for x in sorted(subset_df['filter'].unique())]
+                breaks=sorted(subset_df["filter"].unique()),
+                labels=[str(int(x)) for x in sorted(subset_df["filter"].unique())],
             )
             + p9.scale_fill_continuous(na_value=0)
         )
 
-        if ouput_paths['scan_plot']:
-            plot.save(ouput_paths['scan_plot'], height=6, width=12, dpi=300)
+        if ouput_paths["scan_plot"]:
+            plot.save(ouput_paths["scan_plot"], height=6, width=12, dpi=300)
 
         # Handle case where all f1_plot values are NaN or empty
-        if subset_df['f1_plot'].isna().all() or len(subset_df) == 0:
+        if subset_df["f1_plot"].isna().all() or len(subset_df) == 0:
             # Default to first row if available, otherwise use first values from scan parameters
             if len(subset_df) > 0:
-                winning_filters = pd.DataFrame(subset_df.iloc[0:1])[['stitch', 'filter']]
+                winning_filters = pd.DataFrame(subset_df.iloc[0:1])[
+                    ["stitch", "filter"]
+                ]
             else:
-                winning_filters = pd.DataFrame({
-                    'stitch': [stitch_scan[0] if stitch_scan else 0],
-                    'filter': [filter_scan[0] if filter_scan else 0]
-                })
+                winning_filters = pd.DataFrame(
+                    {
+                        "stitch": [stitch_scan[0] if stitch_scan else 0],
+                        "filter": [filter_scan[0] if filter_scan else 0],
+                    }
+                )
         else:
-            winning_filters = pd.DataFrame(subset_df.iloc[np.argmax(subset_df['f1_plot'])]).T.reset_index(drop=True)[['stitch', 'filter']]
+            winning_filters = pd.DataFrame(
+                subset_df.iloc[np.argmax(subset_df["f1_plot"])]
+            ).T.reset_index(drop=True)[["stitch", "filter"]]
 
-    winning_bout_df = pd.merge(performance_df, winning_filters, on=['stitch', 'filter'])
-    if ouput_paths['bout_csv'] is not None:
-        winning_bout_df.to_csv(ouput_paths['bout_csv'], index=False)
+    winning_bout_df = pd.merge(performance_df, winning_filters, on=["stitch", "filter"])
+    if ouput_paths["bout_csv"] is not None:
+        winning_bout_df.to_csv(ouput_paths["bout_csv"], index=False)
         logging.info(f"Bout performance data saved to {ouput_paths['bout_csv']}")
 
-    melted_winning = pd.melt(winning_bout_df, id_vars=['threshold', 'stitch', 'filter'])
+    melted_winning = pd.melt(winning_bout_df, id_vars=["threshold", "stitch", "filter"])
 
     (
-        p9.ggplot(melted_winning[melted_winning['variable'].isin(['pr', 're', 'f1'])], p9.aes(x='threshold', y='value', color='variable'))
+        p9.ggplot(
+            melted_winning[melted_winning["variable"].isin(["pr", "re", "f1"])],
+            p9.aes(x="threshold", y="value", color="variable"),
+        )
         + p9.geom_line()
         + p9.theme_bw()
         + p9.scale_y_continuous(limits=(0, 1))
-    ).save(ouput_paths['bout_plot'], height=6, width=12, dpi=300)
+    ).save(ouput_paths["bout_plot"], height=6, width=12, dpi=300)
 
-    if ouput_paths['ethogram'] is not None:
+    if ouput_paths["ethogram"] is not None:
         # Prepare data for ethogram plot
         # Use all_annotations to include both behavior (1) and not-behavior (0) states
         plot_df = all_annotations.copy()
         # Add behavior column for all rows
-        plot_df['behavior'] = behavior
-        
+        plot_df["behavior"] = behavior
+
         if not plot_df.empty:
-            plot_df['end'] = plot_df['start'] + plot_df['duration']
-            
+            plot_df["end"] = plot_df["start"] + plot_df["duration"]
+
             # Create a column to indicate source (GT or Pred) for the legend
-            plot_df['source'] = np.where(plot_df['is_gt'], 'Ground Truth', 'Prediction')
+            plot_df["source"] = np.where(plot_df["is_gt"], "Ground Truth", "Prediction")
 
             # combined column for faceting
-            plot_df['animal_video_combo'] = plot_df['animal_idx'].astype(str) + " | " + plot_df['video_name'].astype(str)
-            num_unique_combos = len(plot_df['animal_video_combo'].unique())
+            plot_df["animal_video_combo"] = (
+                plot_df["animal_idx"].astype(str)
+                + " | "
+                + plot_df["video_name"].astype(str)
+            )
+            num_unique_combos = len(plot_df["animal_video_combo"].unique())
 
-            if num_unique_combos > 0: # make sure there is something to plot, otherwise skip
+            if (
+                num_unique_combos > 0
+            ):  # make sure there is something to plot, otherwise skip
                 # Only show behavior=1 bouts in the ethogram
                 # This filters out the "not-behavior" bouts which would clutter the visualization
-                behavior_plot_df = plot_df[plot_df['is_behavior'] == 1]
-                
+                behavior_plot_df = plot_df[plot_df["is_behavior"] == 1]
+
                 if not behavior_plot_df.empty:
                     ethogram_plot = (
-                        p9.ggplot(behavior_plot_df) +
-                        p9.geom_rect(p9.aes(xmin='start', xmax='end', ymin='0.5 * is_gt', ymax='0.5 * is_gt + 0.4', fill='source')) +
-                        p9.theme_bw() +
-                        p9.facet_wrap('~animal_video_combo', ncol=1, scales='free_x') + #row per each animal video combination
-                        p9.scale_y_continuous(breaks=[0.2, 0.7], labels=['Pred', 'GT'], name='') +
-                        p9.scale_fill_brewer(type='qual', palette='Set1') +
-                        p9.labs(x='Frame', fill='Source', title=f'Ethogram for behavior: {behavior}') +
-                        p9.expand_limits(x=0)  # start x-axis at 0
+                        p9.ggplot(behavior_plot_df)
+                        + p9.geom_rect(
+                            p9.aes(
+                                xmin="start",
+                                xmax="end",
+                                ymin="0.5 * is_gt",
+                                ymax="0.5 * is_gt + 0.4",
+                                fill="source",
+                            )
+                        )
+                        + p9.theme_bw()
+                        + p9.facet_wrap(
+                            "~animal_video_combo", ncol=1, scales="free_x"
+                        )  # row per each animal video combination
+                        + p9.scale_y_continuous(
+                            breaks=[0.2, 0.7], labels=["Pred", "GT"], name=""
+                        )
+                        + p9.scale_fill_brewer(type="qual", palette="Set1")
+                        + p9.labs(
+                            x="Frame",
+                            fill="Source",
+                            title=f"Ethogram for behavior: {behavior}",
+                        )
+                        + p9.expand_limits(x=0)  # start x-axis at 0
                     )
                     # Adjust height based on the number of unique animal-video combinations
-                    ethogram_plot.save(ouput_paths['ethogram'], height=1.5 * num_unique_combos + 2, width=12, dpi=300, limitsize=False, verbose=False)
+                    ethogram_plot.save(
+                        ouput_paths["ethogram"],
+                        height=1.5 * num_unique_combos + 2,
+                        width=12,
+                        dpi=300,
+                        limitsize=False,
+                        verbose=False,
+                    )
                     logging.info(f"Ethogram plot saved to {ouput_paths['ethogram']}")
                 else:
-                    logger.warning(f"No behavior instances found for behavior {behavior} after filtering for ethogram.")
+                    logger.warning(
+                        f"No behavior instances found for behavior {behavior} after filtering for ethogram."
+                    )
             else:
-                logger.warning(f"No data to plot for behavior {behavior} after filtering for ethogram.")
+                logger.warning(
+                    f"No data to plot for behavior {behavior} after filtering for ethogram."
+                )
         else:
-            logger.warning(f"No annotations found for behavior {behavior} to generate ethogram plot.")
+            logger.warning(
+                f"No annotations found for behavior {behavior} to generate ethogram plot."
+            )
 
 
-def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan, filter_ground_truth: bool = False) -> pd.DataFrame:
+def generate_iou_scan(
+    all_annotations,
+    stitch_scan,
+    filter_scan,
+    threshold_scan,
+    filter_ground_truth: bool = False,
+) -> pd.DataFrame:
     """Scans stitch and filter values to produce a bout-level performance metrics at varying IoU values.
 
     Args:
@@ -275,23 +373,31 @@ def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan,
 
     # Loop over the animals
     performance_df = []
-    for (cur_animal, cur_video), animal_df in all_annotations.groupby(['animal_idx', 'video_name']):
+    for (cur_animal, cur_video), animal_df in all_annotations.groupby(
+        ["animal_idx", "video_name"]
+    ):
         # For each animal, we want a matrix of intersections, unions, and ious
-        pr_df = animal_df[~animal_df['is_gt']]
+        pr_df = animal_df[~animal_df["is_gt"]]
         if len(pr_df) == 0:
-            logger.warning(f'No predictions for {cur_animal} in {cur_video}... skipping.')
+            logger.warning(
+                f"No predictions for {cur_animal} in {cur_video}... skipping."
+            )
             continue
-        pr_obj = Bouts(pr_df['start'], pr_df['duration'], pr_df['is_behavior'])
-        gt_df = animal_df[animal_df['is_gt']]
-        gt_obj = Bouts(gt_df['start'], gt_df['duration'], gt_df['is_behavior'])
+        pr_obj = Bouts(pr_df["start"], pr_df["duration"], pr_df["is_behavior"])
+        gt_df = animal_df[animal_df["is_gt"]]
+        gt_obj = Bouts(gt_df["start"], gt_df["duration"], gt_df["is_behavior"])
 
         full_duration = pr_obj.starts[-1] + pr_obj.durations[-1]
         pr_obj.fill_to_size(full_duration, 0)
         gt_obj.fill_to_size(full_duration, 0)
 
         # ugly method to scan over each combination of stitch and filter in one line
-        for cur_stitch, cur_filter in zip(*map(np.ndarray.flatten, np.meshgrid(stitch_scan, filter_scan))):
-            cur_filter_settings = ClassifierSettings('', interpolate=0, stitch=cur_stitch, min_bout=cur_filter)
+        for cur_stitch, cur_filter in zip(
+            *map(np.ndarray.flatten, np.meshgrid(stitch_scan, filter_scan))
+        ):
+            cur_filter_settings = ClassifierSettings(
+                "", interpolate=0, stitch=cur_stitch, min_bout=cur_filter
+            )
             cur_pr = pr_obj.copy()
             cur_gt = gt_obj.copy()
             if filter_ground_truth:
@@ -303,11 +409,11 @@ def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan,
             int_mat, u_mat, iou_mat = cur_gt.compare_to(cur_pr)
             for cur_threshold in threshold_scan:
                 new_performance = {
-                    'animal': [cur_animal],
-                    'video': [cur_video],
-                    'stitch': [cur_stitch],
-                    'filter': [cur_filter],
-                    'threshold': [cur_threshold],
+                    "animal": [cur_animal],
+                    "video": [cur_video],
+                    "stitch": [cur_stitch],
+                    "filter": [cur_filter],
+                    "threshold": [cur_threshold],
                 }
                 metrics = Bouts.calculate_iou_metrics(iou_mat, cur_threshold)
                 for key, val in metrics.items():
@@ -315,19 +421,46 @@ def generate_iou_scan(all_annotations, stitch_scan, filter_scan, threshold_scan,
                 performance_df.append(pd.DataFrame(new_performance))
 
     if not performance_df:
-        logger.warning(f"No valid ground truth and prediction pairs found for behavior across all files. Cannot generate performance metrics.")
+        logger.warning(
+            "No valid ground truth and prediction pairs found for behavior across all files. Cannot generate performance metrics."
+        )
         # Return an empty DataFrame with expected columns to prevent downstream errors
-        return pd.DataFrame(columns=['stitch', 'filter', 'threshold', 'tp', 'fn', 'fp', 'pr', 're', 'f1'])
+        return pd.DataFrame(
+            columns=[
+                "stitch",
+                "filter",
+                "threshold",
+                "tp",
+                "fn",
+                "fp",
+                "pr",
+                "re",
+                "f1",
+            ]
+        )
 
     performance_df = pd.concat(performance_df)
     # Aggregate over animals
-    performance_df = performance_df.groupby(['stitch', 'filter', 'threshold'])[['tp', 'fn', 'fp']].apply(np.sum).reset_index()
+    performance_df = (
+        performance_df.groupby(["stitch", "filter", "threshold"])[["tp", "fn", "fp"]]
+        .apply(np.sum)
+        .reset_index()
+    )
     # Re-calculate PR/RE/F1
-    performance_df['pr'] = performance_df['tp'] / (performance_df['tp'] + performance_df['fp'])
-    performance_df['re'] = performance_df['tp'] / (performance_df['tp'] + performance_df['fn'])
-    performance_df['f1'] = 2 * (performance_df['pr'] * performance_df['re']) / (performance_df['pr'] + performance_df['re'])
+    performance_df["pr"] = performance_df["tp"] / (
+        performance_df["tp"] + performance_df["fp"]
+    )
+    performance_df["re"] = performance_df["tp"] / (
+        performance_df["tp"] + performance_df["fn"]
+    )
+    performance_df["f1"] = (
+        2
+        * (performance_df["pr"] * performance_df["re"])
+        / (performance_df["pr"] + performance_df["re"])
+    )
 
     return performance_df
+
 
 def generate_output_paths(results_folder: Path):
     """
@@ -342,9 +475,9 @@ def generate_output_paths(results_folder: Path):
     results_folder.mkdir(parents=True, exist_ok=True)
 
     return {
-        'scan_csv': results_folder / 'scan_performance.csv',
-        'bout_csv': results_folder / 'bout_performance.csv',
-        'ethogram': results_folder / 'ethogram.png',
-        'scan_plot': results_folder / 'scan_performance.png',
-        'bout_plot': results_folder / 'bout_performance.png'
+        "scan_csv": results_folder / "scan_performance.csv",
+        "bout_csv": results_folder / "bout_performance.csv",
+        "ethogram": results_folder / "ethogram.png",
+        "scan_plot": results_folder / "scan_performance.png",
+        "bout_plot": results_folder / "bout_performance.png",
     }
