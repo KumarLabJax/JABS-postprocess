@@ -139,7 +139,9 @@ def test_process_behavior_tables_custom_params(mock_project):
         # Assert
         mock_settings.assert_called_once_with("walking", 5, 3, 10)
         mock_from_folder.assert_called_once_with(
-            Path("/path/to/project"), mock_settings.return_value, Path("/custom/features")
+            Path("/path/to/project"),
+            mock_settings.return_value,
+            Path("/custom/features"),
         )
         mock_project.get_bouts.assert_called_once()
         mock_project.get_bouts.return_value.to_file.assert_called_once_with(
@@ -424,16 +426,14 @@ def test_process_multiple_behaviors_custom_params(mock_find_behaviors):
         assert mock_process.call_count == 2
 
         for i, behavior in enumerate(behaviors):
-            assert (
-                mock_process.call_args_list[i][1]["project_folder"]
-                == Path("/path/to/project")
+            assert mock_process.call_args_list[i][1]["project_folder"] == Path(
+                "/path/to/project"
             )
             assert mock_process.call_args_list[i][1]["behavior"] == behavior["behavior"]
             assert mock_process.call_args_list[i][1]["out_prefix"] == "custom"
             assert mock_process.call_args_list[i][1]["out_bin_size"] == 120
-            assert (
-                mock_process.call_args_list[i][1]["feature_folder"]
-                == Path("/custom/features")
+            assert mock_process.call_args_list[i][1]["feature_folder"] == Path(
+                "/custom/features"
             )
             assert mock_process.call_args_list[i][1]["overwrite"] is True
 
