@@ -3,8 +3,6 @@ name: Pull Request Checks
 on:
   pull_request:
     branches: [ main, master ]
-  push:
-    branches: [ master ]
 
 jobs:
   format-lint:
