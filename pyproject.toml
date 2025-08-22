@@ -3,7 +3,7 @@ name = "jabs-postprocess"
 version = "0.3.0"
 description = "A python library for JABS postprocessing utilities."
 readme = "README.md"
-license = "PLATFORM LICENSE AGREEMENT FOR NON-COMMERCIAL USE"
+license = "LicenseRef-PLATFORM-LICENSE-AGREEMENT-FOR-NON-COMMERCIAL-USE"
 license-files = ["LICENSE"]
 repository = "https://github.com/KumarLabJax/JABS-postprocess"
 requires-python = ">=3.10"
