@@ -1,7 +1,7 @@
 """Unit tests for the generate_behavior_tables module.
 
 This test module validates the functionality of the behavior table generation process
-in JABS (Just Another Behavior Scorer). The main functions under test are:
+in JABS. It currently tests two functions:
 
 1. process_behavior_tables - Processes a single behavior, extracting bout information
    and creating summary tables with configurable parameters
@@ -16,10 +16,13 @@ dependencies and validate proper interaction between components.
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pathlib import Path
 
 from jabs_postprocess.generate_behavior_tables import (
     process_behavior_tables,
     process_multiple_behaviors,
+    merge_behavior_tables,
+    merge_multiple_behavior_tables,
 )
 
 
@@ -78,13 +81,13 @@ def test_process_behavior_tables_default_params(mock_project):
     ):
         # Act
         result = process_behavior_tables(
-            project_folder="/path/to/project", behavior="grooming"
+            project_folder=Path("/path/to/project"), behavior="grooming"
         )
 
         # Assert
         mock_settings.assert_called_once_with("grooming", None, None, None)
         mock_from_folder.assert_called_once_with(
-            "/path/to/project", mock_settings.return_value, None
+            Path("/path/to/project"), mock_settings.return_value, None
         )
         mock_project.get_bouts.assert_called_once()
         mock_project.get_bouts.return_value.to_file.assert_called_once_with(
@@ -122,11 +125,11 @@ def test_process_behavior_tables_custom_params(mock_project):
     ):
         # Act
         result = process_behavior_tables(
-            project_folder="/path/to/project",
+            project_folder=Path("/path/to/project"),
             behavior="walking",
             out_prefix="custom",
             out_bin_size=120,
-            feature_folder="/custom/features",
+            feature_folder=Path("/custom/features"),
             interpolate_size=5,
             stitch_gap=3,
             min_bout_length=10,
@@ -136,7 +139,9 @@ def test_process_behavior_tables_custom_params(mock_project):
         # Assert
         mock_settings.assert_called_once_with("walking", 5, 3, 10)
         mock_from_folder.assert_called_once_with(
-            "/path/to/project", mock_settings.return_value, "/custom/features"
+            Path("/path/to/project"),
+            mock_settings.return_value,
+            Path("/custom/features"),
         )
         mock_project.get_bouts.assert_called_once()
         mock_project.get_bouts.return_value.to_file.assert_called_once_with(
@@ -185,7 +190,7 @@ def test_process_behavior_tables_param_combinations(
     ):
         # Act
         process_behavior_tables(
-            project_folder="/path/to/project",
+            project_folder=Path("/path/to/project"),
             behavior="grooming",
             interpolate_size=interpolate_size,
             stitch_gap=stitch_gap,
@@ -216,7 +221,7 @@ def test_process_behavior_tables_empty_project_folder():
         with pytest.raises(
             ValueError, match="Project folder is empty or does not exist"
         ):
-            process_behavior_tables(project_folder="", behavior="grooming")
+            process_behavior_tables(project_folder=Path(""), behavior="grooming")
 
 
 def test_process_behavior_tables_error_during_processing(mock_project):
@@ -236,7 +241,7 @@ def test_process_behavior_tables_error_during_processing(mock_project):
         # Act & Assert
         with pytest.raises(RuntimeError, match="Failed to process bouts"):
             process_behavior_tables(
-                project_folder="/path/to/project", behavior="grooming"
+                project_folder=Path("/path/to/project"), behavior="grooming"
             )
 
 
@@ -248,7 +253,7 @@ def test_process_behavior_tables_error_during_processing(mock_project):
             [{"behavior": "grooming"}],
             [
                 {
-                    "project_folder": "/path/to/project",
+                    "project_folder": Path("/path/to/project"),
                     "behavior": "grooming",
                     "out_prefix": "behavior",
                     "out_bin_size": 60,
@@ -268,7 +273,7 @@ def test_process_behavior_tables_error_during_processing(mock_project):
             ],
             [
                 {
-                    "project_folder": "/path/to/project",
+                    "project_folder": Path("/path/to/project"),
                     "behavior": "grooming",
                     "out_prefix": "behavior",
                     "out_bin_size": 60,
@@ -279,7 +284,7 @@ def test_process_behavior_tables_error_during_processing(mock_project):
                     "overwrite": False,
                 },
                 {
-                    "project_folder": "/path/to/project",
+                    "project_folder": Path("/path/to/project"),
                     "behavior": "walking",
                     "out_prefix": "behavior",
                     "out_bin_size": 60,
@@ -302,7 +307,7 @@ def test_process_behavior_tables_error_during_processing(mock_project):
             ],
             [
                 {
-                    "project_folder": "/path/to/project",
+                    "project_folder": Path("/path/to/project"),
                     "behavior": "grooming",
                     "out_prefix": "behavior",
                     "out_bin_size": 60,
@@ -313,7 +318,7 @@ def test_process_behavior_tables_error_during_processing(mock_project):
                     "overwrite": False,
                 },
                 {
-                    "project_folder": "/path/to/project",
+                    "project_folder": Path("/path/to/project"),
                     "behavior": "walking",
                     "out_prefix": "behavior",
                     "out_bin_size": 60,
@@ -324,7 +329,7 @@ def test_process_behavior_tables_error_during_processing(mock_project):
                     "overwrite": False,
                 },
                 {
-                    "project_folder": "/path/to/project",
+                    "project_folder": Path("/path/to/project"),
                     "behavior": "feeding",
                     "out_prefix": "behavior",
                     "out_bin_size": 60,
@@ -364,7 +369,7 @@ def test_process_multiple_behaviors(behaviors, expected_calls, mock_find_behavio
 
         # Act
         result = process_multiple_behaviors(
-            project_folder="/path/to/project", behaviors=behaviors
+            project_folder=Path("/path/to/project"), behaviors=behaviors
         )
 
         # Assert
@@ -409,11 +414,11 @@ def test_process_multiple_behaviors_custom_params(mock_find_behaviors):
 
         # Act
         result = process_multiple_behaviors(
-            project_folder="/path/to/project",
+            project_folder=Path("/path/to/project"),
             behaviors=behaviors,
             out_prefix="custom",
             out_bin_size=120,
-            feature_folder="/custom/features",
+            feature_folder=Path("/custom/features"),
             overwrite=True,
         )
 
@@ -421,16 +426,14 @@ def test_process_multiple_behaviors_custom_params(mock_find_behaviors):
         assert mock_process.call_count == 2
 
         for i, behavior in enumerate(behaviors):
-            assert (
-                mock_process.call_args_list[i][1]["project_folder"]
-                == "/path/to/project"
+            assert mock_process.call_args_list[i][1]["project_folder"] == Path(
+                "/path/to/project"
             )
             assert mock_process.call_args_list[i][1]["behavior"] == behavior["behavior"]
             assert mock_process.call_args_list[i][1]["out_prefix"] == "custom"
             assert mock_process.call_args_list[i][1]["out_bin_size"] == 120
-            assert (
-                mock_process.call_args_list[i][1]["feature_folder"]
-                == "/custom/features"
+            assert mock_process.call_args_list[i][1]["feature_folder"] == Path(
+                "/custom/features"
             )
             assert mock_process.call_args_list[i][1]["overwrite"] is True
 
@@ -456,7 +459,7 @@ def test_process_multiple_behaviors_behavior_not_found(mock_find_behaviors):
 
     # Act & Assert
     with pytest.raises(ValueError, match="invalid_behavior not in experiment folder"):
-        process_multiple_behaviors("/path/to/project", behaviors)
+        process_multiple_behaviors(Path("/path/to/project"), behaviors)
 
 
 def test_process_multiple_behaviors_missing_behavior_key():
@@ -473,7 +476,7 @@ def test_process_multiple_behaviors_missing_behavior_key():
 
     # Act & Assert
     with pytest.raises(KeyError, match="Behavior name required"):
-        process_multiple_behaviors("/path/to/project", behaviors)
+        process_multiple_behaviors(Path("/path/to/project"), behaviors)
 
 
 def test_process_multiple_behaviors_error_propagation(mock_find_behaviors):
@@ -502,7 +505,7 @@ def test_process_multiple_behaviors_error_propagation(mock_find_behaviors):
 
         # Act & Assert
         with pytest.raises(RuntimeError, match="Failed to process walking behavior"):
-            process_multiple_behaviors("/path/to/project", behaviors)
+            process_multiple_behaviors(Path("/path/to/project"), behaviors)
 
 
 def test_process_multiple_behaviors_no_available_behaviors():
@@ -524,7 +527,7 @@ def test_process_multiple_behaviors_no_available_behaviors():
 
         # Act & Assert
         with pytest.raises(ValueError, match="grooming not in experiment folder"):
-            process_multiple_behaviors("/path/to/project", behaviors)
+            process_multiple_behaviors(Path("/path/to/project"), behaviors)
 
 
 def test_process_multiple_behaviors_empty_list(mock_find_behaviors):
@@ -542,8 +545,228 @@ def test_process_multiple_behaviors_empty_list(mock_find_behaviors):
         "jabs_postprocess.generate_behavior_tables.process_behavior_tables"
     ) as mock_process:
         # Act
-        result = process_multiple_behaviors("/path/to/project", behaviors)
+        result = process_multiple_behaviors(Path("/path/to/project"), behaviors)
 
         # Assert
         assert mock_process.call_count == 0
         assert result == []
+
+
+# Tests for merge functionality
+
+
+@pytest.fixture
+def mock_bout_table():
+    """Create a mock BoutTable."""
+    mock = MagicMock()
+    mock.settings.behavior = "grooming"
+    mock.data.columns = ["animal_idx", "start", "duration", "is_behavior"]
+    return mock
+
+
+@pytest.fixture
+def mock_bin_table():
+    """Create a mock BinTable."""
+    mock = MagicMock()
+    mock.settings.behavior = "grooming"
+    mock.data.columns = ["longterm_idx", "time", "bout_behavior"]
+    return mock
+
+
+def test_merge_behavior_tables_bout_tables():
+    """Test merging multiple bout tables."""
+    table_paths = [Path("/path/table1.csv"), Path("/path/table2.csv")]
+
+    with (
+        patch("jabs_postprocess.generate_behavior_tables.Path") as mock_path,
+        patch(
+            "jabs_postprocess.generate_behavior_tables.BoutTable"
+        ) as mock_bout_table_class,
+    ):
+        # Mock Path.exists() to return True for all tables
+        mock_path.return_value.exists.return_value = True
+
+        # Create mock table instances
+        mock_table1 = MagicMock()
+        mock_table1.settings.behavior = "grooming"
+        mock_table1.data.columns = ["animal_idx", "start", "duration", "is_behavior"]
+
+        mock_table2 = MagicMock()
+        mock_table2.settings.behavior = "grooming"
+        mock_table2.data.columns = ["animal_idx", "start", "duration", "is_behavior"]
+
+        mock_merged = MagicMock()
+
+        # Mock the from_file method to return our mock tables
+        mock_bout_table_class.from_file.side_effect = [
+            mock_table1,
+            mock_table1,
+            mock_table2,
+        ]
+        mock_bout_table_class.combine_data.return_value = mock_merged
+
+        # Act
+        result = merge_behavior_tables(table_paths, "test_output", False)
+
+        # Assert
+        mock_bout_table_class.from_file.assert_called()
+        mock_bout_table_class.combine_data.assert_called_once()
+        mock_merged.to_file.assert_called_once_with(
+            "test_output_grooming_bouts_merged.csv", False
+        )
+        assert result == (
+            "test_output_grooming_bouts_merged.csv",
+            "test_output_grooming_bouts_merged.csv",
+        )
+
+
+def test_merge_behavior_tables_bin_tables():
+    """Test merging multiple bin tables."""
+    table_paths = [Path("/path/table1.csv"), Path("/path/table2.csv")]
+
+    with (
+        patch("jabs_postprocess.generate_behavior_tables.Path") as mock_path,
+        patch(
+            "jabs_postprocess.generate_behavior_tables.BoutTable"
+        ) as mock_bout_table_class,
+        patch(
+            "jabs_postprocess.generate_behavior_tables.BinTable"
+        ) as mock_bin_table_class,
+    ):
+        # Mock Path.exists() to return True for all tables
+        mock_path.return_value.exists.return_value = True
+
+        # First call determines table type - mock as bin table
+        mock_bout_table1 = MagicMock()
+        mock_bout_table1.settings.behavior = "grooming"
+        mock_bout_table1.data.columns = ["longterm_idx", "time", "bout_behavior"]
+
+        # Create bin table mocks
+        mock_table1 = MagicMock()
+        mock_table1.settings.behavior = "grooming"
+
+        mock_table2 = MagicMock()
+        mock_table2.settings.behavior = "grooming"
+
+        mock_merged = MagicMock()
+
+        # Mock the from_file methods
+        mock_bout_table_class.from_file.return_value = mock_bout_table1
+        # Need 3 calls to from_file: one for each table in the loop
+        mock_bin_table_class.from_file.side_effect = [
+            mock_table1,
+            mock_table2,
+            mock_table1,
+        ]
+        mock_bin_table_class.combine_data.return_value = mock_merged
+
+        # Act
+        result = merge_behavior_tables(table_paths, "test_output", False)
+
+        # Assert
+        mock_bin_table_class.combine_data.assert_called_once()
+        mock_merged.to_file.assert_called_once_with(
+            "test_output_grooming_summaries_merged.csv", False
+        )
+        assert result == (
+            "test_output_grooming_summaries_merged.csv",
+            "test_output_grooming_summaries_merged.csv",
+        )
+
+
+def test_merge_behavior_tables_empty_list():
+    """Test merge_behavior_tables with empty input list."""
+    with pytest.raises(ValueError, match="No input tables provided"):
+        merge_behavior_tables([])
+
+
+def test_merge_behavior_tables_nonexistent_file():
+    """Test merge_behavior_tables with non-existent file."""
+    table_paths = [Path("/path/nonexistent.csv")]
+
+    with patch("jabs_postprocess.generate_behavior_tables.Path") as mock_path:
+        mock_path.return_value.exists.return_value = False
+
+        with pytest.raises(FileNotFoundError, match="Input table not found"):
+            merge_behavior_tables(table_paths)
+
+
+def test_merge_behavior_tables_incompatible_behaviors():
+    """Test merge_behavior_tables with tables having different behaviors."""
+    table_paths = [Path("/path/table1.csv"), Path("/path/table2.csv")]
+
+    with (
+        patch("jabs_postprocess.generate_behavior_tables.Path") as mock_path,
+        patch(
+            "jabs_postprocess.generate_behavior_tables.BoutTable"
+        ) as mock_bout_table_class,
+    ):
+        mock_path.return_value.exists.return_value = True
+
+        # Create mock tables with different behaviors
+        mock_table1 = MagicMock()
+        mock_table1.settings.behavior = "grooming"
+        mock_table1.data.columns = ["animal_idx", "start", "duration", "is_behavior"]
+
+        mock_table2 = MagicMock()
+        mock_table2.settings.behavior = "walking"
+        mock_table2.data.columns = ["animal_idx", "start", "duration", "is_behavior"]
+
+        mock_bout_table_class.from_file.side_effect = [
+            mock_table1,
+            mock_table1,
+            mock_table2,
+        ]
+
+        with pytest.raises(ValueError, match="Incompatible behaviors"):
+            merge_behavior_tables(table_paths)
+
+
+def test_merge_multiple_behavior_tables():
+    """Test merging multiple sets of behavior tables grouped by behavior."""
+    table_groups = {
+        "grooming": [Path("/path/groom1.csv"), Path("/path/groom2.csv")],
+        "walking": [Path("/path/walk1.csv")],
+    }
+
+    with (
+        patch("jabs_postprocess.generate_behavior_tables.pd.read_csv") as mock_read_csv,
+        patch(
+            "jabs_postprocess.generate_behavior_tables.merge_behavior_tables"
+        ) as mock_merge,
+    ):
+        # Mock pandas read_csv to simulate table type detection
+        def read_csv_side_effect(path, **kwargs):
+            mock_df = MagicMock()
+            if "bout_behavior" in str(path):
+                mock_df.columns = ["longterm_idx", "time", "bout_behavior"]
+            else:
+                mock_df.columns = ["animal_idx", "start", "duration", "is_behavior"]
+            mock_df.empty = False
+            return mock_df
+
+        mock_read_csv.side_effect = read_csv_side_effect
+
+        # Mock merge_behavior_tables to return expected outputs
+        def merge_side_effect(tables, prefix, overwrite):
+            behavior = prefix.split("_")[1]
+            return f"merged_{behavior}_output.csv", f"merged_{behavior}_output.csv"
+
+        mock_merge.side_effect = merge_side_effect
+
+        # Act
+        result = merge_multiple_behavior_tables(table_groups, "merged", False)
+
+        # Assert
+        assert len(result) == 2
+        assert "grooming" in result
+        assert "walking" in result
+        assert mock_merge.call_count >= 2  # At least one call per behavior
+
+
+def test_merge_multiple_behavior_tables_empty_group():
+    """Test merge_multiple_behavior_tables with empty table group."""
+    table_groups = {"grooming": []}
+
+    with pytest.raises(ValueError, match="No tables provided for behavior: grooming"):
+        merge_multiple_behavior_tables(table_groups)
