@@ -24,6 +24,7 @@ jobs:
   build:
     name: "Build Docker Image"
     needs: [format-lint, test]
+    secrets: inherit
     uses: ./.github/workflows/_build-docker-action.yml
 
   check-version-changed:
