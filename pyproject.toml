@@ -5,7 +5,6 @@ description = "A python library for JABS postprocessing utilities."
 readme = "README.md"
 license = "LicenseRef-PLATFORM-LICENSE-AGREEMENT-FOR-NON-COMMERCIAL-USE"
 license-files = ["LICENSE"]
-repository = "https://github.com/KumarLabJax/JABS-postprocess"
 requires-python = ">=3.10"
 
 dependencies = [
@@ -28,6 +27,9 @@ dependencies = [
     "scipy>=1.15.2",
     "typer>=0.15.4",
 ]
+
+[project.urls]
+repository = "https://github.com/KumarLabJax/JABS-postprocess"
 
 [project.scripts]
 "jabs-postprocess" = "jabs_postprocess.cli.main:app"
