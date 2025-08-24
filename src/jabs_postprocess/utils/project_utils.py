@@ -675,6 +675,11 @@ class BoutTable(Table):
             "closest_id",
             "closest_lixit",
             "closest_corner",
+            "total_bout_count",
+            "avg_bout_duration",
+            "bout_duration_std",
+            "bout_duration_var",
+            "latency_to_first_bout",
         ]
         self._check_fields()
 
@@ -777,6 +782,77 @@ class BoutTable(Table):
             # Not all features exist, so safely ignore them if they aren't present
             except (KeyError, ValueError):
                 pass
+
+    def add_bout_statistics(self):
+        """Adds bout-level statistics as new columns to the table.
+
+        This method calculates aggregate statistics per behavior per animal and adds them
+        as new columns to each bout row. This is different from add_bout_features which
+        summarizes per-frame features over individual bouts.
+
+        Added columns:
+            - total_bout_count: Total number of behavior bouts for this animal
+            - avg_bout_duration: Average bout duration for this behavior for this animal
+            - bout_duration_std: Standard deviation of bout durations for this animal
+            - bout_duration_var: Variance of bout durations for this animal
+            - latency_to_first_bout: Frame number of first behavior bout (if any)
+        """
+
+        # Group by animal and calculate statistics for behavior bouts only
+        behavior_bouts = self._data[self._data["is_behavior"] == 1]
+
+        if len(behavior_bouts) == 0:
+            # No behavior bouts, add columns with default values
+            self._data["total_bout_count"] = 0
+            self._data["avg_bout_duration"] = np.nan
+            self._data["bout_duration_std"] = np.nan
+            self._data["bout_duration_var"] = np.nan
+            self._data["latency_to_first_bout"] = np.nan
+            return
+
+        # Calculate statistics per animal
+        stats_by_animal = (
+            behavior_bouts.groupby("animal_idx")
+            .agg(
+                {
+                    "duration": ["count", "mean", "std", "var"],
+                    "start": "min",  # First bout start time
+                }
+            )
+            .round(2)
+        )
+
+        # Flatten column names
+        stats_by_animal.columns = [
+            "total_bout_count",
+            "avg_bout_duration",
+            "bout_duration_std",
+            "bout_duration_var",
+            "latency_to_first_bout",
+        ]
+
+        # Merge statistics back to the main table
+        self._data = self._data.merge(
+            stats_by_animal, left_on="animal_idx", right_index=True, how="left"
+        )
+
+        # Fill NaN values for animals with no behavior bouts
+        self._data["total_bout_count"] = self._data["total_bout_count"].fillna(0)
+        self._data[
+            [
+                "avg_bout_duration",
+                "bout_duration_std",
+                "bout_duration_var",
+                "latency_to_first_bout",
+            ]
+        ] = self._data[
+            [
+                "avg_bout_duration",
+                "bout_duration_std",
+                "bout_duration_var",
+                "latency_to_first_bout",
+            ]
+        ].fillna(np.nan)
 
     def to_summary_table(self, bin_size_minutes: int = 60):
         """Converts bout information into binned summary table.

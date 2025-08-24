@@ -23,11 +23,12 @@ multiple scenarios with different inputs and expected outputs.
 """
 
 import numpy as np
+import pandas as pd
 import pytest
 
 # Assuming Bouts is in jabs_utils.project_utils
 # Adjust the import path if your project structure is different
-from jabs_postprocess.utils.project_utils import Bouts
+from jabs_postprocess.utils.project_utils import Bouts, BoutTable, ClassifierSettings
 
 
 def test_bouts_to_vector_empty_bouts_uses_min_frames():
@@ -232,3 +233,285 @@ def test_bouts_to_vector_various_scenarios(
             assert np.all(vector_output == fill_state), (
                 "Empty initial bouts should result in vector of fill_state"
             )
+
+
+# Tests for BoutTable.add_bout_statistics method
+
+
+class TestBoutTableAddBoutStatistics:
+    """Test suite for BoutTable.add_bout_statistics method."""
+
+    def test_add_bout_statistics_with_behavior_bouts(self):
+        """Test add_bout_statistics with multiple animals having behavior bouts."""
+        # Arrange
+        data = pd.DataFrame(
+            {
+                "animal_idx": [0, 0, 0, 1, 1, 2],
+                "video_name": ["vid1"] * 6,
+                "start": [100, 300, 800, 150, 600, 50],
+                "duration": [50, 75, 30, 60, 45, 100],
+                "is_behavior": [1, 1, 1, 1, 1, 1],  # All behavior bouts
+                "exp_prefix": ["exp1"] * 6,
+                "time": ["2024-01-01 12:00:00"] * 6,
+            }
+        )
+
+        settings = ClassifierSettings("grooming", 0, 0, 0)
+        bout_table = BoutTable(settings, data)
+
+        # Act
+        bout_table.add_bout_statistics()
+
+        # Assert
+        result_data = bout_table.data
+
+        # Check that new columns exist
+        expected_columns = [
+            "total_bout_count",
+            "avg_bout_duration",
+            "bout_duration_std",
+            "bout_duration_var",
+            "latency_to_first_bout",
+        ]
+        for col in expected_columns:
+            assert col in result_data.columns, f"Column {col} should be added"
+
+        # Check animal 0 statistics (3 bouts: 50, 75, 30)
+        animal_0_data = result_data[result_data["animal_idx"] == 0].iloc[0]
+        assert animal_0_data["total_bout_count"] == 3
+        assert abs(animal_0_data["avg_bout_duration"] - 51.67) < 0.1  # (50+75+30)/3
+        assert animal_0_data["latency_to_first_bout"] == 100
+
+        # Check animal 1 statistics (2 bouts: 60, 45)
+        animal_1_data = result_data[result_data["animal_idx"] == 1].iloc[0]
+        assert animal_1_data["total_bout_count"] == 2
+        assert abs(animal_1_data["avg_bout_duration"] - 52.5) < 0.1  # (60+45)/2
+        assert animal_1_data["latency_to_first_bout"] == 150
+
+        # Check animal 2 statistics (1 bout: 100)
+        animal_2_data = result_data[result_data["animal_idx"] == 2].iloc[0]
+        assert animal_2_data["total_bout_count"] == 1
+        assert animal_2_data["avg_bout_duration"] == 100
+        assert animal_2_data["latency_to_first_bout"] == 50
+
+    def test_add_bout_statistics_no_behavior_bouts(self):
+        """Test add_bout_statistics when there are no behavior bouts."""
+        # Arrange
+        data = pd.DataFrame(
+            {
+                "animal_idx": [0, 0, 1],
+                "video_name": ["vid1"] * 3,
+                "start": [100, 300, 150],
+                "duration": [50, 75, 60],
+                "is_behavior": [0, -1, 0],  # No behavior bouts
+                "exp_prefix": ["exp1"] * 3,
+                "time": ["2024-01-01 12:00:00"] * 3,
+            }
+        )
+
+        settings = ClassifierSettings("grooming", 0, 0, 0)
+        bout_table = BoutTable(settings, data)
+
+        # Act
+        bout_table.add_bout_statistics()
+
+        # Assert
+        result_data = bout_table.data
+
+        # All statistics should be 0 or NaN for no behavior bouts
+        assert (result_data["total_bout_count"] == 0).all()
+        assert result_data["avg_bout_duration"].isna().all()
+        assert result_data["bout_duration_std"].isna().all()
+        assert result_data["bout_duration_var"].isna().all()
+        assert result_data["latency_to_first_bout"].isna().all()
+
+    def test_add_bout_statistics_mixed_behavior_states(self):
+        """Test add_bout_statistics with mixed behavior states per animal."""
+        # Arrange
+        data = pd.DataFrame(
+            {
+                "animal_idx": [0, 0, 0, 0, 1, 1, 1],
+                "video_name": ["vid1"] * 7,
+                "start": [100, 200, 300, 400, 150, 250, 350],
+                "duration": [50, 25, 75, 40, 60, 30, 80],
+                "is_behavior": [1, 0, 1, -1, 1, 1, 0],  # Mixed states
+                "exp_prefix": ["exp1"] * 7,
+                "time": ["2024-01-01 12:00:00"] * 7,
+            }
+        )
+
+        settings = ClassifierSettings("grooming", 0, 0, 0)
+        bout_table = BoutTable(settings, data)
+
+        # Act
+        bout_table.add_bout_statistics()
+
+        # Assert
+        result_data = bout_table.data
+
+        # Animal 0: 2 behavior bouts (50, 75)
+        animal_0_rows = result_data[result_data["animal_idx"] == 0]
+        assert (animal_0_rows["total_bout_count"] == 2).all()
+        assert abs(animal_0_rows["avg_bout_duration"].iloc[0] - 62.5) < 0.1  # (50+75)/2
+        assert (animal_0_rows["latency_to_first_bout"] == 100).all()
+
+        # Animal 1: 2 behavior bouts (60, 30)
+        animal_1_rows = result_data[result_data["animal_idx"] == 1]
+        assert (animal_1_rows["total_bout_count"] == 2).all()
+        assert abs(animal_1_rows["avg_bout_duration"].iloc[0] - 45.0) < 0.1  # (60+30)/2
+        assert (animal_1_rows["latency_to_first_bout"] == 150).all()
+
+    def test_add_bout_statistics_single_bout_per_animal(self):
+        """Test add_bout_statistics with single bout per animal (variance should be NaN)."""
+        # Arrange
+        data = pd.DataFrame(
+            {
+                "animal_idx": [0, 1, 2],
+                "video_name": ["vid1"] * 3,
+                "start": [100, 200, 300],
+                "duration": [50, 75, 90],
+                "is_behavior": [1, 1, 1],
+                "exp_prefix": ["exp1"] * 3,
+                "time": ["2024-01-01 12:00:00"] * 3,
+            }
+        )
+
+        settings = ClassifierSettings("grooming", 0, 0, 0)
+        bout_table = BoutTable(settings, data)
+
+        # Act
+        bout_table.add_bout_statistics()
+
+        # Assert
+        result_data = bout_table.data
+
+        # Each animal should have 1 bout, std and var should be NaN for single values
+        assert (result_data["total_bout_count"] == 1).all()
+        assert (result_data["avg_bout_duration"] == result_data["duration"]).all()
+        assert (
+            result_data["bout_duration_std"].isna().all()
+        )  # std of single value is NaN
+        assert (
+            result_data["bout_duration_var"].isna().all()
+        )  # var of single value is NaN
+        assert (result_data["latency_to_first_bout"] == result_data["start"]).all()
+
+    def test_add_bout_statistics_preserves_existing_columns(self):
+        """Test that add_bout_statistics preserves existing columns and data."""
+        # Arrange
+        data = pd.DataFrame(
+            {
+                "animal_idx": [0, 1],
+                "video_name": ["vid1", "vid1"],
+                "start": [100, 200],
+                "duration": [50, 75],
+                "is_behavior": [1, 1],
+                "exp_prefix": ["exp1", "exp1"],
+                "time": ["2024-01-01 12:00:00", "2024-01-01 12:00:00"],
+                "distance": [10.5, 15.2],  # Use existing optional column instead
+            }
+        )
+
+        settings = ClassifierSettings("grooming", 0, 0, 0)
+        bout_table = BoutTable(settings, data)
+
+        # Act
+        bout_table.add_bout_statistics()
+
+        # Assert
+        result_data = bout_table.data
+
+        # Original columns should be preserved
+        original_columns = [
+            "animal_idx",
+            "video_name",
+            "start",
+            "duration",
+            "is_behavior",
+            "exp_prefix",
+            "time",
+            "distance",
+        ]
+        for col in original_columns:
+            assert col in result_data.columns, (
+                f"Original column {col} should be preserved"
+            )
+
+        # Original data should be unchanged
+        assert result_data["distance"].tolist() == [10.5, 15.2]
+        assert result_data["start"].tolist() == [100, 200]
+        assert result_data["duration"].tolist() == [50, 75]
+
+    def test_add_bout_statistics_variance_calculation(self):
+        """Test that variance and standard deviation are calculated correctly."""
+        # Arrange - Create data with known variance
+        data = pd.DataFrame(
+            {
+                "animal_idx": [0, 0, 0],
+                "video_name": ["vid1"] * 3,
+                "start": [100, 200, 300],
+                "duration": [10, 20, 30],  # Simple values for easy calculation
+                "is_behavior": [1, 1, 1],
+                "exp_prefix": ["exp1"] * 3,
+                "time": ["2024-01-01 12:00:00"] * 3,
+            }
+        )
+
+        settings = ClassifierSettings("grooming", 0, 0, 0)
+        bout_table = BoutTable(settings, data)
+
+        # Act
+        bout_table.add_bout_statistics()
+
+        # Assert
+        result_data = bout_table.data.iloc[0]
+
+        # Manual calculation: durations = [10, 20, 30], mean = 20
+        # variance = ((10-20)^2 + (20-20)^2 + (30-20)^2) / (3-1) = (100 + 0 + 100) / 2 = 100
+        # std = sqrt(100) = 10
+        expected_mean = 20.0
+        expected_var = 100.0
+        expected_std = 10.0
+
+        assert abs(result_data["avg_bout_duration"] - expected_mean) < 0.1
+        assert abs(result_data["bout_duration_var"] - expected_var) < 0.1
+        assert abs(result_data["bout_duration_std"] - expected_std) < 0.1
+
+    def test_add_bout_statistics_empty_dataframe(self):
+        """Test add_bout_statistics with completely empty DataFrame."""
+        # Arrange
+        data = pd.DataFrame(
+            {
+                "animal_idx": [],
+                "video_name": [],
+                "start": [],
+                "duration": [],
+                "is_behavior": [],
+                "exp_prefix": [],
+                "time": [],
+            }
+        )
+
+        settings = ClassifierSettings("grooming", 0, 0, 0)
+        bout_table = BoutTable(settings, data)
+
+        # Act
+        bout_table.add_bout_statistics()
+
+        # Assert
+        result_data = bout_table.data
+
+        # Should handle empty dataframe gracefully
+        expected_columns = [
+            "total_bout_count",
+            "avg_bout_duration",
+            "bout_duration_std",
+            "bout_duration_var",
+            "latency_to_first_bout",
+        ]
+        for col in expected_columns:
+            assert col in result_data.columns, (
+                f"Column {col} should be added even for empty data"
+            )
+
+        # No rows to check values, but shouldn't crash
