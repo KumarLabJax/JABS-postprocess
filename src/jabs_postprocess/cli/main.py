@@ -152,9 +152,6 @@ def evaluate_ground_truth(
         np.round(np.arange(0.05, 1.01, 0.05), 2).tolist(),
         help="List of intersection over union thresholds to scan (will be rounded to 2 decimal places).",
     ),
-    interpolation_size: int = typer.Option(
-        0, help="Number of frames to interpolate missing data"
-    ),
     filter_ground_truth: bool = typer.Option(
         False,
         help="Apply filters to ground truth data (default is only to filter predictions)",
@@ -189,7 +186,6 @@ def evaluate_ground_truth(
         stitch_scan=stitch_scan,
         filter_scan=filter_scan,
         iou_thresholds=iou_thresholds,
-        interpolation_size=interpolation_size,
         filter_ground_truth=filter_ground_truth,
         trim_time=trim_time,
     )
