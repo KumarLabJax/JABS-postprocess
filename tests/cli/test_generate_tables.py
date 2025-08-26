@@ -22,7 +22,7 @@ class TestGenerateTables:
     """Test class for the generate_tables CLI command."""
 
     @pytest.mark.parametrize("behavior_count", [1, 2, 3])
-    @pytest.mark.parametrize("add_statistics", [True, False])
+    @pytest.mark.parametrize("add_statistics", [True, False, None])
     @patch("jabs_postprocess.cli.main.generate_behavior_tables")
     @patch("jabs_postprocess.cli.main.BoutTable")
     def test_generate_tables_basic(
@@ -72,6 +72,8 @@ class TestGenerateTables:
 
         if add_statistics:
             cmd_args.append("--add-statistics")
+        elif add_statistics is False:
+            cmd_args.append("--no-add-statistics")
 
         # Act
         result = runner.invoke(app, cmd_args)
@@ -94,11 +96,11 @@ class TestGenerateTables:
             assert "min_bout_length" in behavior_config
 
         # Verify statistics handling
-        if add_statistics:
+        if add_statistics or add_statistics is None:
             assert mock_bout_table_class.from_file.call_count == behavior_count
             assert mock_bout_table.add_bout_statistics.call_count == behavior_count
             assert mock_bout_table.to_file.call_count == behavior_count
-        else:
+        elif add_statistics is False:
             mock_bout_table_class.from_file.assert_not_called()
 
     @pytest.mark.parametrize(

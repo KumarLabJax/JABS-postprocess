@@ -243,10 +243,9 @@ def generate_tables(
     add_statistics: Annotated[
         bool,
         typer.Option(
-            "--add-statistics",
             help="Add bout statistics (count, duration stats, latency) to behavior tables",
         ),
-    ] = False,
+    ] = True,
 ):
     """Generate behavior tables from JABS predictions.
 
