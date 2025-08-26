@@ -13,6 +13,7 @@ from jabs_postprocess import (
     generate_behavior_tables,
     heuristic_classify as heuristic_classify_func,
 )
+from jabs_postprocess.utils.project_utils import BoutTable
 from jabs_postprocess.utils.metadata import (
     DEFAULT_INTERPOLATE,
     DEFAULT_MIN_BOUT,
@@ -239,11 +240,24 @@ def generate_tables(
         ),
     ] = None,
     overwrite: Annotated[bool, typer.Option(help="Overwrites output files")] = False,
+    add_statistics: Annotated[
+        bool,
+        typer.Option(
+            help="Add bout statistics (count, duration stats, latency) to behavior tables",
+        ),
+    ] = True,
 ):
     """Generate behavior tables from JABS predictions.
 
     This command transforms behavior predictions from a JABS project into tabular format,
     creating both bout-level and summary tables.
+
+    The --add-statistics option adds additional columns with bout-level statistics:
+    - total_bout_count: Number of behavior bouts per animal
+    - avg_bout_duration: Average bout duration per animal
+    - bout_duration_std: Standard deviation of bout durations
+    - bout_duration_var: Variance of bout durations
+    - latency_to_first_bout: Frame number of first behavior bout
     """
     # Convert Path to string
     feature_folder = feature_folder if feature_folder else None
@@ -267,10 +281,29 @@ def generate_tables(
         overwrite=overwrite,
     )
 
+    # Add bout statistics if requested
+    if add_statistics:
+        typer.echo("Adding bout statistics to generated tables...")
+        for behavior_name, (bout_file, summary_file) in zip(
+            behavior, results, strict=True
+        ):
+            try:
+                # Load bout table and add statistics
+                bout_table = BoutTable.from_file(bout_file)
+                bout_table.add_bout_statistics()
+                bout_table.to_file(bout_file, overwrite=True)
+                typer.echo(f"  Added statistics to {bout_file}")
+            except Exception as e:
+                typer.echo(
+                    f"  Warning: Failed to add statistics to {bout_file}: {str(e)}"
+                )
+
     for behavior_name, (bout_file, summary_file) in zip(behavior, results, strict=True):
         typer.echo(f"Generated tables for {behavior_name}:")
         typer.echo(f"  Bout table: {bout_file}")
         typer.echo(f"  Summary table: {summary_file}")
+        if add_statistics:
+            typer.echo("    ✓ Includes bout statistics")
 
 
 @app.command()
@@ -380,6 +413,83 @@ def merge_tables(
         raise typer.Exit(1)
     except Exception as e:
         typer.echo(f"Unexpected error: {str(e)}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def add_bout_statistics(
+    input_tables: Annotated[
+        List[Path],
+        typer.Option(help="Paths to bout table files to add statistics to"),
+    ],
+    output_suffix: Annotated[
+        str,
+        typer.Option(help="Suffix to add to output filenames (before .csv)"),
+    ] = "_with_stats",
+    overwrite: Annotated[
+        bool, typer.Option(help="Overwrites input files instead of creating new ones")
+    ] = False,
+):
+    """Add bout statistics to existing behavior tables.
+
+    This command adds bout-level statistics to existing bout table files:
+    - total_bout_count: Number of behavior bouts per animal
+    - avg_bout_duration: Average bout duration per animal
+    - bout_duration_std: Standard deviation of bout durations
+    - bout_duration_var: Variance of bout durations
+    - latency_to_first_bout: Frame number of first behavior bout
+
+    By default, creates new files with '_with_stats' suffix. Use --overwrite to modify files in-place.
+    """
+    if not input_tables:
+        typer.echo("Error: No input tables provided.")
+        raise typer.Exit(1)
+
+    # Validate all input files exist
+    for table_path in input_tables:
+        if not table_path.exists():
+            typer.echo(f"Error: Input table not found: {table_path}")
+            raise typer.Exit(1)
+
+    successful_count = 0
+    for table_path in input_tables:
+        try:
+            # Load bout table and add statistics
+            bout_table = BoutTable.from_file(table_path)
+            bout_table.add_bout_statistics()
+
+            # Determine output path
+            if overwrite:
+                output_path = table_path
+            else:
+                # Add suffix before .csv extension
+                stem = table_path.stem
+                output_path = table_path.parent / f"{stem}{output_suffix}.csv"
+
+            # Save enhanced table
+            bout_table.to_file(output_path, overwrite=True)
+
+            typer.echo(f"✓ Added statistics to: {table_path}")
+            if not overwrite:
+                typer.echo(f"  Output saved to: {output_path}")
+
+            successful_count += 1
+
+        except Exception as e:
+            typer.echo(f"✗ Failed to process {table_path}: {str(e)}")
+
+    if successful_count > 0:
+        typer.echo(
+            f"\nSuccessfully processed {successful_count} out of {len(input_tables)} tables."
+        )
+        typer.echo("Added statistics columns:")
+        typer.echo("  - total_bout_count: Number of behavior bouts per animal")
+        typer.echo("  - avg_bout_duration: Average bout duration per animal")
+        typer.echo("  - bout_duration_std: Standard deviation of bout durations")
+        typer.echo("  - bout_duration_var: Variance of bout durations")
+        typer.echo("  - latency_to_first_bout: Frame number of first behavior bout")
+    else:
+        typer.echo("Error: No tables were successfully processed.")
         raise typer.Exit(1)
 
 
