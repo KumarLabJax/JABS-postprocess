@@ -14,6 +14,10 @@ into publication-ready tables and visualizations.
 
 ### Installation
 
+This section covers installing JABS-postprocess using either PyPI or Docker. See the
+[Development Installation](#development-installation) section for instructions on 
+installing from source.
+
 #### Option 1: From PyPI 
 
 ##### Using `venv` and `pip`
@@ -63,17 +67,6 @@ singularity build --fakeroot jabs-postprocess.sif vm/jabs-postprocess.def
 # Run commands through container
 singularity run jabs-postprocess.sif jabs-postprocess --help
 ```
-
-#### Option 3: From source
-```bash
-# Clone source code
-git clone https://github.com/KumarLabJax/JABS-postprocess.git
-
-cd JABS-postprocess
-
-uv sync
-```
-
 
 ### Verify Installation
 ```bash
