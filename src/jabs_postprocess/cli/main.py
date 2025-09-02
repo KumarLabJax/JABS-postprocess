@@ -199,7 +199,10 @@ def evaluate_ground_truth(
             raise typer.BadParameter(
                 "When using --filter-ground-truth, you must also provide --stitch-value-filter and --filter-value-filter."
             )
-        filter_gt_dict = {"stitch": int(stitch_value_filter), "filter": int(filter_value_filter)}
+        filter_gt_dict = {
+            "stitch": int(stitch_value_filter),
+            "filter": int(filter_value_filter),
+        }
 
     # Call the refactored function with individual parameters
     compare_gt.evaluate_ground_truth(
