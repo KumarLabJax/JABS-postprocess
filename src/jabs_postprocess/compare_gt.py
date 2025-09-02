@@ -668,8 +668,10 @@ def generate_filtered_iou_curve(
         pr_obj.fill_to_size(full_duration, 0)
         gt_obj.fill_to_size(full_duration, 0)
 
-        pr_fil = pr_obj.copy(); pr_fil.filter_by_settings(settings)
-        gt_fil = gt_obj.copy(); gt_fil.filter_by_settings(settings)
+        pr_fil = pr_obj.copy()
+        pr_fil.filter_by_settings(settings)
+        gt_fil = gt_obj.copy()
+        gt_fil.filter_by_settings(settings)
 
         # Handle empty-positive cases without calling compare_to (which expects non-empty arrays)
         num_pr_pos = int(np.sum(pr_fil.values == 1))
