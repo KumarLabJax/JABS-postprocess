@@ -41,8 +41,10 @@ def evaluate_ground_truth(
         filter_scan: List of filter (minimum duration in frames to consider real) values to test
         iou_thresholds: List of intersection over union thresholds to scan
         filter_ground_truth: Optional dict specifying stitch/filter to apply to BOTH GT and predictions
-            for additional filtered outputs. Shape: {"stitch": int, "filter": int}. If None, no
-            additional filtered outputs are produced.
+            for additional filtered outputs. If provided, need to include two more arguments: stitch_value_filter 
+            and filter_value_filter
+        stitch_value_filter: Stitch (frames) to use for filtered outputs (gt and pred)
+        filter_value_filter: Minimum bout (frames) to use for filtered outputs (gt and pred)
         scan_output: Output file to save the filter scan performance plot
         bout_output: Output file to save the resulting bout performance plot
         trim_time: Limit the duration in frames of videos for performance
