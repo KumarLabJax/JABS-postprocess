@@ -369,16 +369,22 @@ def evaluate_ground_truth(
             )
             if filtered_curve_df is not None and len(filtered_curve_df) > 0:
                 if ouput_paths.get("bout_filtered_csv") is not None:
-                    filtered_curve_df.to_csv(ouput_paths["bout_filtered_csv"], index=False)
+                    filtered_curve_df.to_csv(
+                        ouput_paths["bout_filtered_csv"], index=False
+                    )
                     logging.info(
                         f"Filtered curve performance saved to {ouput_paths['bout_filtered_csv']}"
                     )
                 # Reuse the same curve plotting by adding fixed stitch/filter columns
                 filtered_curve_df["stitch"] = stitch_val
                 filtered_curve_df["filter"] = filter_val
-                _save_bout_curve_performance(filtered_curve_df, ouput_paths.get("bout_filtered_plot"))
+                _save_bout_curve_performance(
+                    filtered_curve_df, ouput_paths.get("bout_filtered_plot")
+                )
             else:
-                logger.warning("No filtered performance data available to save plots/CSV.")
+                logger.warning(
+                    "No filtered performance data available to save plots/CSV."
+                )
 
 
 def generate_iou_scan(
@@ -578,7 +584,9 @@ def _save_filtered_ethogram(
         pr_obj.fill_to_size(full_duration, 0)
         gt_obj.fill_to_size(full_duration, 0)
 
-        settings = ClassifierSettings("", interpolate=0, stitch=stitch_val, min_bout=filter_val)
+        settings = ClassifierSettings(
+            "", interpolate=0, stitch=stitch_val, min_bout=filter_val
+        )
         pr_fil = pr_obj.copy()
         gt_fil = gt_obj.copy()
         pr_fil.filter_by_settings(settings)
@@ -595,7 +603,13 @@ def _save_filtered_ethogram(
             for s, e, v in zip(starts, ends, values):
                 if v == 1:
                     records.append(
-                        {"animal_idx": cur_animal, "video_name": cur_video, "start": int(s), "end": int(e), "track": track_label}
+                        {
+                            "animal_idx": cur_animal,
+                            "video_name": cur_video,
+                            "start": int(s),
+                            "end": int(e),
+                            "track": track_label,
+                        }
                     )
 
         add_records_from_bouts(gt_obj, "GT Raw")
@@ -608,11 +622,15 @@ def _save_filtered_ethogram(
         return
 
     df = pd.DataFrame.from_records(records)
-    df["animal_video_combo"] = df["animal_idx"].astype(str) + " | " + df["video_name"].astype(str)
+    df["animal_video_combo"] = (
+        df["animal_idx"].astype(str) + " | " + df["video_name"].astype(str)
+    )
 
     # Map track to vertical bands in the requested order: raw gt, filtered gt, raw pred, filtered pred
     track_order = ["GT Raw", "GT Filtered", "Pred Raw", "Pred Filtered"]
-    track_to_idx = {label: idx for idx, label in enumerate(track_order[::-1])}  # reverse so top is GT Raw
+    track_to_idx = {
+        label: idx for idx, label in enumerate(track_order[::-1])
+    }  # reverse so top is GT Raw
     df["track_idx"] = df["track"].map(track_to_idx)
     df["ymin"] = df["track_idx"].astype(float)
     df["ymax"] = df["ymin"] + 0.9
@@ -621,7 +639,9 @@ def _save_filtered_ethogram(
 
     plot = (
         p9.ggplot(df)
-        + p9.geom_rect(p9.aes(xmin="start", xmax="end", ymin="ymin", ymax="ymax", fill="track"))
+        + p9.geom_rect(
+            p9.aes(xmin="start", xmax="end", ymin="ymin", ymax="ymax", fill="track")
+        )
         + p9.theme_bw()
         + p9.facet_wrap("~animal_video_combo", ncol=1, scales="free_x")
         + p9.scale_y_continuous(
@@ -638,7 +658,14 @@ def _save_filtered_ethogram(
         + p9.expand_limits(x=0)
     )
 
-    plot.save(output_path, height=2.0 * num_unique_combos + 2, width=12, dpi=300, limitsize=False, verbose=False)
+    plot.save(
+        output_path,
+        height=2.0 * num_unique_combos + 2,
+        width=12,
+        dpi=300,
+        limitsize=False,
+        verbose=False,
+    )
     logging.info(f"Filtered ethogram plot saved to {output_path}")
 
 
@@ -653,10 +680,14 @@ def generate_filtered_iou_curve(
     Returns a DataFrame aggregated over animals/videos with columns: threshold,tp,fn,fp,pr,re,f1
     """
     threshold_scan = np.round(threshold_scan, 2)
-    settings = ClassifierSettings("", interpolate=0, stitch=stitch_val, min_bout=filter_val)
+    settings = ClassifierSettings(
+        "", interpolate=0, stitch=stitch_val, min_bout=filter_val
+    )
 
     perf_rows = []
-    for (cur_animal, cur_video), animal_df in all_annotations.groupby(["animal_idx", "video_name"]):
+    for (cur_animal, cur_video), animal_df in all_annotations.groupby(
+        ["animal_idx", "video_name"]
+    ):
         pr_df = animal_df[~animal_df["is_gt"]]
         if len(pr_df) == 0:
             continue
@@ -681,11 +712,30 @@ def generate_filtered_iou_curve(
                 if num_pr_pos == 0 and num_gt_pos == 0:
                     metrics = {"tp": 0, "fn": 0, "fp": 0, "pr": 0, "re": 0, "f1": 0}
                 elif num_pr_pos == 0 and num_gt_pos > 0:
-                    metrics = {"tp": 0, "fn": num_gt_pos, "fp": 0, "pr": 0, "re": 0, "f1": 0}
+                    metrics = {
+                        "tp": 0,
+                        "fn": num_gt_pos,
+                        "fp": 0,
+                        "pr": 0,
+                        "re": 0,
+                        "f1": 0,
+                    }
                 else:  # num_pr_pos > 0 and num_gt_pos == 0
-                    metrics = {"tp": 0, "fn": 0, "fp": num_pr_pos, "pr": 0, "re": 0, "f1": 0}
+                    metrics = {
+                        "tp": 0,
+                        "fn": 0,
+                        "fp": num_pr_pos,
+                        "pr": 0,
+                        "re": 0,
+                        "f1": 0,
+                    }
                 perf_rows.append(
-                    {"animal": cur_animal, "video": cur_video, "threshold": thr, **metrics}
+                    {
+                        "animal": cur_animal,
+                        "video": cur_video,
+                        "threshold": thr,
+                        **metrics,
+                    }
                 )
             continue
 
