@@ -498,20 +498,23 @@ def generate_iou_scan(
         logger.warning(
             "No valid ground truth and prediction pairs found for behavior across all files. Cannot generate performance metrics."
         )
-        # Return an empty DataFrame with expected columns to prevent downstream errors
-        return pd.DataFrame(
-            columns=[
-                "stitch",
-                "filter",
-                "threshold",
-                "tp",
-                "fn",
-                "fp",
-                "pr",
-                "re",
-                "f1",
-            ]
-        )
+        # Build stitch/filter/threshold with zeros to prevent downstream errors
+        rows = []
+        for s in stitch_scan:
+            for f in filter_scan:
+                for t in threshold_scan:
+                    rows.append({
+                        "stitch": s,
+                        "filter": f,
+                        "threshold": t,
+                        "tp": 0,
+                        "fn": 0,
+                        "fp": 0,
+                        "pr": np.nan,
+                        "re": np.nan,
+                        "f1": np.nan,
+                    })
+        return pd.DataFrame(rows)
 
     performance_df = pd.concat(performance_df)
     # Aggregate over animals
