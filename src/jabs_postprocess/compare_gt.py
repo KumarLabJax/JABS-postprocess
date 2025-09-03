@@ -1,8 +1,8 @@
 """Associated lines of code that deal with the comparison of predictions (from classify.py) and GT annotation (from a JABS project)."""
 
 import logging
-from typing import List, Optional
 from pathlib import Path
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -14,7 +14,6 @@ from jabs_postprocess.utils.project_utils import (
     ClassifierSettings,
     JabsProject,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +40,7 @@ def evaluate_ground_truth(
         filter_scan: List of filter (minimum duration in frames to consider real) values to test
         iou_thresholds: List of intersection over union thresholds to scan
         filter_ground_truth: Optional dict specifying stitch/filter to apply to BOTH GT and predictions
-            for additional filtered outputs. If provided, need to include two more arguments: stitch_value_filter 
+            for additional filtered outputs. If provided, need to include two more arguments: stitch_value_filter
             and filter_value_filter
         stitch_value_filter: Stitch (frames) to use for filtered outputs (gt and pred)
         filter_value_filter: Minimum bout (frames) to use for filtered outputs (gt and pred)
@@ -157,8 +156,6 @@ def evaluate_ground_truth(
     if ouput_paths["scan_csv"] is not None:
         performance_df.to_csv(ouput_paths["scan_csv"], index=False)
         logging.info(f"Scan performance data saved to {ouput_paths['scan_csv']}")
-
-    _melted_df = pd.melt(performance_df, id_vars=["threshold", "stitch", "filter"])
 
     middle_threshold = np.sort(iou_thresholds)[int(np.floor(len(iou_thresholds) / 2))]
 
@@ -363,11 +360,12 @@ def evaluate_ground_truth(
                 ouput_paths.get("ethogram_filtered"),
             )
             # 2) Filtered curves CSV + plot over IoU thresholds
-            filtered_curve_df = generate_filtered_iou_curve(
+            filtered_curve_df = generate_iou_scan(
                 all_annotations,
-                stitch_val,
-                filter_val,
+                [stitch_val],
+                [filter_val],
                 np.round(iou_thresholds, 2),
+                True,  # True for filter_ground_truth
             )
             if filtered_curve_df is not None and len(filtered_curve_df) > 0:
                 if ouput_paths.get("bout_filtered_csv") is not None:
@@ -377,9 +375,6 @@ def evaluate_ground_truth(
                     logging.info(
                         f"Filtered curve performance saved to {ouput_paths['bout_filtered_csv']}"
                     )
-                # Reuse the same curve plotting by adding fixed stitch/filter columns
-                filtered_curve_df["stitch"] = stitch_val
-                filtered_curve_df["filter"] = filter_val
                 _save_bout_curve_performance(
                     filtered_curve_df, ouput_paths.get("bout_filtered_plot")
                 )
@@ -445,8 +440,47 @@ def generate_iou_scan(
             # Always apply filters to predictions
             cur_pr.filter_by_settings(cur_filter_settings)
 
+            # Handle cases with zero positives on either side without calling compare_to.
+            # This is necessary when filtering both gt and pred because then there can be
+            # gt videos that have all annotations filtered out as well.
+            num_pr_pos = int(np.sum(cur_pr.values == 1))
+            num_gt_pos = int(np.sum(cur_gt.values == 1))
+            if num_pr_pos == 0 or num_gt_pos == 0:
+                for cur_threshold in threshold_scan:
+                    if num_pr_pos == 0 and num_gt_pos == 0:
+                        metrics = {"tp": 0, "fn": 0, "fp": 0, "pr": 0, "re": 0, "f1": 0}
+                    elif num_pr_pos == 0 and num_gt_pos > 0:
+                        metrics = {
+                            "tp": 0,
+                            "fn": num_gt_pos,
+                            "fp": 0,
+                            "pr": 0,
+                            "re": 0,
+                            "f1": 0,
+                        }
+                    else:  # num_pr_pos > 0 and num_gt_pos == 0
+                        metrics = {
+                            "tp": 0,
+                            "fn": 0,
+                            "fp": num_pr_pos,
+                            "pr": 0,
+                            "re": 0,
+                            "f1": 0,
+                        }
+                    new_performance = {
+                        "animal": [cur_animal],
+                        "video": [cur_video],
+                        "stitch": [cur_stitch],
+                        "filter": [cur_filter],
+                        "threshold": [cur_threshold],
+                    }
+                    for key, val in metrics.items():
+                        new_performance[key] = [val]
+                    performance_df.append(pd.DataFrame(new_performance))
+                continue
+
             # Add iou metrics to the list
-            int_mat, u_mat, iou_mat = cur_gt.compare_to(cur_pr)
+            _, _, iou_mat = cur_gt.compare_to(cur_pr)
             for cur_threshold in threshold_scan:
                 new_performance = {
                     "animal": [cur_animal],
@@ -508,6 +542,7 @@ def generate_output_paths(results_folder: Path):
 
     Args:
         results_folder: Path to the folder where results will be saved.
+
     Returns:
         A dictionary with keys 'scan_csv', 'bout_csv', 'ethogram', 'scan_plot', and 'bout_plot' containing the respective output paths.
     """
@@ -566,7 +601,6 @@ def _save_filtered_ethogram(
         filter_val: The filter value
         output_path: Path to save the plot to
     """
-
     if output_path is None:
         return
 
@@ -669,91 +703,3 @@ def _save_filtered_ethogram(
         verbose=False,
     )
     logging.info(f"Filtered ethogram plot saved to {output_path}")
-
-
-def generate_filtered_iou_curve(
-    all_annotations: pd.DataFrame,
-    stitch_val: int,
-    filter_val: int,
-    threshold_scan: np.ndarray,
-) -> Optional[pd.DataFrame]:
-    """Compute PR/RE/F1 across IoU thresholds after applying a fixed stitch/filter to BOTH GT and predictions.
-
-    Returns a DataFrame aggregated over animals/videos with columns: threshold,tp,fn,fp,pr,re,f1
-    """
-    threshold_scan = np.round(threshold_scan, 2)
-    settings = ClassifierSettings(
-        "", interpolate=0, stitch=stitch_val, min_bout=filter_val
-    )
-
-    perf_rows = []
-    for (cur_animal, cur_video), animal_df in all_annotations.groupby(
-        ["animal_idx", "video_name"]
-    ):
-        pr_df = animal_df[~animal_df["is_gt"]]
-        if len(pr_df) == 0:
-            continue
-        gt_df = animal_df[animal_df["is_gt"]]
-        pr_obj = Bouts(pr_df["start"], pr_df["duration"], pr_df["is_behavior"])
-        gt_obj = Bouts(gt_df["start"], gt_df["duration"], gt_df["is_behavior"])
-
-        full_duration = int(pr_obj.starts[-1] + pr_obj.durations[-1])
-        pr_obj.fill_to_size(full_duration, 0)
-        gt_obj.fill_to_size(full_duration, 0)
-
-        pr_fil = pr_obj.copy()
-        pr_fil.filter_by_settings(settings)
-        gt_fil = gt_obj.copy()
-        gt_fil.filter_by_settings(settings)
-
-        # Handle empty-positive cases without calling compare_to (which expects non-empty arrays)
-        num_pr_pos = int(np.sum(pr_fil.values == 1))
-        num_gt_pos = int(np.sum(gt_fil.values == 1))
-        if num_pr_pos == 0 or num_gt_pos == 0:
-            for thr in threshold_scan:
-                if num_pr_pos == 0 and num_gt_pos == 0:
-                    metrics = {"tp": 0, "fn": 0, "fp": 0, "pr": 0, "re": 0, "f1": 0}
-                elif num_pr_pos == 0 and num_gt_pos > 0:
-                    metrics = {
-                        "tp": 0,
-                        "fn": num_gt_pos,
-                        "fp": 0,
-                        "pr": 0,
-                        "re": 0,
-                        "f1": 0,
-                    }
-                else:  # num_pr_pos > 0 and num_gt_pos == 0
-                    metrics = {
-                        "tp": 0,
-                        "fn": 0,
-                        "fp": num_pr_pos,
-                        "pr": 0,
-                        "re": 0,
-                        "f1": 0,
-                    }
-                perf_rows.append(
-                    {
-                        "animal": cur_animal,
-                        "video": cur_video,
-                        "threshold": thr,
-                        **metrics,
-                    }
-                )
-            continue
-
-        int_mat, u_mat, iou_mat = gt_fil.compare_to(pr_fil)
-        for thr in threshold_scan:
-            metrics = Bouts.calculate_iou_metrics(iou_mat, thr)
-            perf_rows.append(
-                {"animal": cur_animal, "video": cur_video, "threshold": thr, **metrics}
-            )
-
-    if len(perf_rows) == 0:
-        return None
-
-    df = pd.DataFrame(perf_rows)
-    df = df.groupby(["threshold"])[["tp", "fn", "fp"]].apply(np.sum).reset_index()
-    df["pr"] = df["tp"] / (df["tp"] + df["fp"]) if "tp" in df and "fp" in df else np.nan
-    df["re"] = df["tp"] / (df["tp"] + df["fn"]) if "tp" in df and "fn" in df else np.nan
-    df["f1"] = 2 * (df["pr"] * df["re"]) / (df["pr"] + df["re"])
-    return df
