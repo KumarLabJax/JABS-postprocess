@@ -312,7 +312,9 @@ def generate_tables(
                     f"  Warning: Failed to add statistics to {bout_file}: {str(e)}"
                 )
 
-    for behavior_name, (bout_file, summary_file) in zip(behavior_names, results, strict=True):
+    for behavior_name, (bout_file, summary_file) in zip(
+        behavior_names, results, strict=True
+    ):
         typer.echo(f"Generated tables for {behavior_name}:")
         typer.echo(f"  Bout table: {bout_file}")
         typer.echo(f"  Summary table: {summary_file}")
