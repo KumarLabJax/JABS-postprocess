@@ -1,7 +1,5 @@
 import json
 import pytest
-from pathlib import Path
-from unittest.mock import mock_open, patch
 from jabs_postprocess.cli.utils import load_json
 
 
@@ -61,28 +59,34 @@ class TestLoadJsonPathInput:
 class TestLoadJsonStringAsJson:
     """Test load_json with string containing JSON content."""
 
-    @pytest.mark.parametrize("json_str,expected", [
-        ('{"key": "value"}', {"key": "value"}),
-        ('{"nested": {"data": [1, 2, 3]}}', {"nested": {"data": [1, 2, 3]}}),
-        ('[1, 2, 3]', [1, 2, 3]),
-        ('["a", "b", "c"]', ["a", "b", "c"]),
-        ('"simple string"', "simple string"),
-        ('true', True),
-        ('false', False),
-        ('null', None),
-        ('42', 42),
-        ('3.14', 3.14),
-    ])
+    @pytest.mark.parametrize(
+        "json_str,expected",
+        [
+            ('{"key": "value"}', {"key": "value"}),
+            ('{"nested": {"data": [1, 2, 3]}}', {"nested": {"data": [1, 2, 3]}}),
+            ("[1, 2, 3]", [1, 2, 3]),
+            ('["a", "b", "c"]', ["a", "b", "c"]),
+            ('"simple string"', "simple string"),
+            ("true", True),
+            ("false", False),
+            ("null", None),
+            ("42", 42),
+            ("3.14", 3.14),
+        ],
+    )
     def test_valid_json_strings(self, json_str, expected):
         """Various valid JSON strings should be parsed correctly."""
         result = load_json(json_str)
         assert result == expected
 
-    @pytest.mark.parametrize("json_str", [
-        '  {"key": "value"}  ',  # with whitespace
-        '\n{\n  "key": "value"\n}\n',  # with newlines
-        '\t["a", "b"]\t',  # with tabs
-    ])
+    @pytest.mark.parametrize(
+        "json_str",
+        [
+            '  {"key": "value"}  ',  # with whitespace
+            '\n{\n  "key": "value"\n}\n',  # with newlines
+            '\t["a", "b"]\t',  # with tabs
+        ],
+    )
     def test_json_with_whitespace(self, json_str):
         """JSON strings with surrounding whitespace should parse correctly."""
         result = load_json(json_str)
@@ -90,13 +94,15 @@ class TestLoadJsonStringAsJson:
 
     def test_complex_nested_json(self):
         """Complex nested JSON should parse correctly."""
-        json_str = json.dumps({
-            "users": [
-                {"name": "Alice", "age": 30, "active": True},
-                {"name": "Bob", "age": 25, "active": False}
-            ],
-            "meta": {"version": 1, "timestamp": None}
-        })
+        json_str = json.dumps(
+            {
+                "users": [
+                    {"name": "Alice", "age": 30, "active": True},
+                    {"name": "Bob", "age": 25, "active": False},
+                ],
+                "meta": {"version": 1, "timestamp": None},
+            }
+        )
         result = load_json(json_str)
         assert result["users"][0]["name"] == "Alice"
         assert result["meta"]["timestamp"] is None
@@ -117,7 +123,9 @@ class TestLoadJsonStringAsFilePath:
     def test_string_path_nonexistent(self):
         """String that looks like path but file doesn't exist should raise ValueError."""
         # Use a path that doesn't start with JSON chars
-        with pytest.raises(ValueError, match="neither a valid file path nor valid JSON"):
+        with pytest.raises(
+            ValueError, match="neither a valid file path nor valid JSON"
+        ):
             load_json("nonexistent_file.json")
 
     def test_string_path_with_invalid_json(self, tmp_path):
@@ -181,7 +189,9 @@ class TestLoadJsonErrorCases:
 
     def test_invalid_json_string_not_file(self):
         """Invalid JSON that's also not a file should raise ValueError."""
-        with pytest.raises(ValueError, match="neither a valid file path nor valid JSON"):
+        with pytest.raises(
+            ValueError, match="neither a valid file path nor valid JSON"
+        ):
             load_json("definitely not json or a file path")
 
     def test_truncated_error_message_for_long_json(self):
@@ -234,29 +244,29 @@ class TestLoadJsonReturnTypes:
 
     def test_returns_list_type(self):
         """List JSON should return list type."""
-        result = load_json('[1, 2, 3]')
+        result = load_json("[1, 2, 3]")
         assert isinstance(result, list)
 
     def test_returns_none_type(self):
         """null JSON should return None."""
-        result = load_json('null')
+        result = load_json("null")
         assert result is None
 
     def test_returns_bool_type(self):
         """Boolean JSON should return bool."""
-        result = load_json('true')
+        result = load_json("true")
         assert isinstance(result, bool)
         assert result is True
 
     def test_returns_int_type(self):
         """Integer JSON should return int."""
-        result = load_json('42')
+        result = load_json("42")
         assert isinstance(result, int)
         assert result == 42
 
     def test_returns_float_type(self):
         """Float JSON should return float."""
-        result = load_json('3.14')
+        result = load_json("3.14")
         assert isinstance(result, float)
         assert result == 3.14
 

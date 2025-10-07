@@ -13,9 +13,8 @@ Key functionality tested:
 6. JSON config file loading for behavior parameters
 """
 
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch
 import pytest
-import json
 
 from jabs_postprocess.cli.main import app
 from jabs_postprocess.utils.metadata import (
@@ -199,9 +198,13 @@ class TestGenerateTables:
 
         behavior_config = call_args.kwargs["behaviors"][0]
         # Check that parameters were set correctly (or use defaults if None)
-        expected_interpolate = interpolate_size if interpolate_size is not None else DEFAULT_INTERPOLATE
+        expected_interpolate = (
+            interpolate_size if interpolate_size is not None else DEFAULT_INTERPOLATE
+        )
         expected_stitch = stitch_gap if stitch_gap is not None else DEFAULT_STITCH
-        expected_min_bout = min_bout_length if min_bout_length is not None else DEFAULT_MIN_BOUT
+        expected_min_bout = (
+            min_bout_length if min_bout_length is not None else DEFAULT_MIN_BOUT
+        )
 
         assert behavior_config["interpolate_size"] == expected_interpolate
         assert behavior_config["stitch_gap"] == expected_stitch
@@ -366,4 +369,7 @@ class TestGenerateTables:
 
         # Assert
         assert result.exit_code == 1
-        assert "Must provide either --behavior-config or --behavior options" in result.stdout
+        assert (
+            "Must provide either --behavior-config or --behavior options"
+            in result.stdout
+        )
