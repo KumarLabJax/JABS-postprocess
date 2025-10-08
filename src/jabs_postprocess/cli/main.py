@@ -234,6 +234,19 @@ def generate_tables(
     This command transforms behavior predictions from a JABS project into tabular format,
     creating both bout-level and summary tables.
 
+    Example JSON for behavior_config argument:
+    {
+        "behaviors": [
+            {"behavior": "Behavior_1_Name", "interpolate_size": 1},
+            {"behavior": "Behavior_2_Name", "stitch_gap": 30, "min_bout_length": 150}
+            {"behavior": "Behavior_2_Name",
+             "stitch_gap": 30,
+             "min_bout_length": 150,
+             "interpolate_size": 1
+            }
+        ]
+    }
+
     The --add-statistics option adds additional columns with bout-level statistics:
     - total_bout_count: Number of behavior bouts per animal
     - avg_bout_duration: Average bout duration per animal
