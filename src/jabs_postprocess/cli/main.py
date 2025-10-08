@@ -19,6 +19,7 @@ from jabs_postprocess.utils.metadata import (
     DEFAULT_MIN_BOUT,
     DEFAULT_STITCH,
 )
+from jabs_postprocess.cli.utils import load_json
 
 app = typer.Typer()
 
@@ -199,9 +200,6 @@ def generate_tables(
             help="Folder that contains the project with both pose files and behavior prediction files"
         ),
     ],
-    behavior: Annotated[
-        List[str], typer.Option(help="Behavior(s) to produce table(s) for")
-    ],
     out_prefix: Annotated[
         str,
         typer.Option(
@@ -217,24 +215,6 @@ def generate_tables(
             help="If features were exported, include feature-based characteristics of bouts"
         ),
     ] = None,
-    interpolate_size: Annotated[
-        Optional[int],
-        typer.Option(
-            help=f"Maximum number of frames in which missing data will be interpolated (default: {DEFAULT_INTERPOLATE})"
-        ),
-    ] = None,
-    stitch_gap: Annotated[
-        Optional[int],
-        typer.Option(
-            help=f"Number of frames in which sequential behavior prediction bouts will be joined (default: {DEFAULT_STITCH})"
-        ),
-    ] = None,
-    min_bout_length: Annotated[
-        Optional[int],
-        typer.Option(
-            help=f"Minimum number of frames in which a behavior prediction must be to be considered (default: {DEFAULT_MIN_BOUT})"
-        ),
-    ] = None,
     overwrite: Annotated[bool, typer.Option(help="Overwrites output files")] = False,
     add_statistics: Annotated[
         bool,
@@ -242,11 +222,30 @@ def generate_tables(
             help="Add bout statistics (count, duration stats, latency) to behavior tables",
         ),
     ] = True,
+    behavior_config: Path | None = typer.Option(
+        None, "--behavior-config", help="JSON file with behavior configurations"
+    ),
+    behaviors: List[str] | None = typer.Option(
+        None, "--behavior", help="Simple behavior names (uses defaults)"
+    ),
 ):
     """Generate behavior tables from JABS predictions.
 
     This command transforms behavior predictions from a JABS project into tabular format,
     creating both bout-level and summary tables.
+
+    Example JSON for behavior_config argument:
+    {
+        "behaviors": [
+            {"behavior": "Behavior_1_Name", "interpolate_size": 1},
+            {"behavior": "Behavior_2_Name", "stitch_gap": 30, "min_bout_length": 150}
+            {"behavior": "Behavior_2_Name",
+             "stitch_gap": 30,
+             "min_bout_length": 150,
+             "interpolate_size": 1
+            }
+        ]
+    }
 
     The --add-statistics option adds additional columns with bout-level statistics:
     - total_bout_count: Number of behavior bouts per animal
@@ -258,30 +257,62 @@ def generate_tables(
     # Convert Path to string
     feature_folder = feature_folder if feature_folder else None
 
-    behaviors = []
-    for behavior_name in behavior:
-        behavior_config = {
-            "behavior": behavior_name,
-            "interpolate_size": interpolate_size,
-            "stitch_gap": stitch_gap,
-            "min_bout_length": min_bout_length,
-        }
-        behaviors.append(behavior_config)
+    behavior_args = []
+
+    if behavior_config:
+        try:
+            config = load_json(behavior_config)
+            if not isinstance(config, dict) or "behaviors" not in config:
+                raise ValueError("Config must be a JSON object with 'behaviors' key")
+
+            for b in config["behaviors"]:
+                behavior_args.append(
+                    {
+                        "behavior": b["behavior"],
+                        "interpolate_size": b.get(
+                            "interpolate_size", DEFAULT_INTERPOLATE
+                        ),
+                        "stitch_gap": b.get("stitch_gap", DEFAULT_STITCH),
+                        "min_bout_length": b.get("min_bout_length", DEFAULT_MIN_BOUT),
+                    }
+                )
+        except (ValueError, TypeError, KeyError) as e:
+            typer.echo(f"Error loading behavior config: {e}", err=True)
+            raise typer.Exit(1)
+    elif behaviors:
+        for behavior_name in behaviors:
+            behavior_args.append(
+                {
+                    "behavior": behavior_name,
+                    "interpolate_size": DEFAULT_INTERPOLATE,
+                    "stitch_gap": DEFAULT_STITCH,
+                    "min_bout_length": DEFAULT_MIN_BOUT,
+                }
+            )
+    else:
+        typer.echo(
+            "Error: Must provide either --behavior-config or --behavior options",
+            err=True,
+        )
+        raise typer.Exit(1)
 
     results = generate_behavior_tables.process_multiple_behaviors(
         project_folder=project_folder,
-        behaviors=behaviors,
+        behaviors=behavior_args,
         out_prefix=out_prefix,
         out_bin_size=out_bin_size,
         feature_folder=feature_folder,
         overwrite=overwrite,
     )
 
+    # Extract behavior names for output
+    behavior_names = [b["behavior"] for b in behavior_args]
+
     # Add bout statistics if requested
     if add_statistics:
         typer.echo("Adding bout statistics to generated tables...")
         for behavior_name, (bout_file, summary_file) in zip(
-            behavior, results, strict=True
+            behavior_names, results, strict=True
         ):
             try:
                 # Load bout table and add statistics
@@ -294,7 +325,9 @@ def generate_tables(
                     f"  Warning: Failed to add statistics to {bout_file}: {str(e)}"
                 )
 
-    for behavior_name, (bout_file, summary_file) in zip(behavior, results, strict=True):
+    for behavior_name, (bout_file, summary_file) in zip(
+        behavior_names, results, strict=True
+    ):
         typer.echo(f"Generated tables for {behavior_name}:")
         typer.echo(f"  Bout table: {bout_file}")
         typer.echo(f"  Summary table: {summary_file}")

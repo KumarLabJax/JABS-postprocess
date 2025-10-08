@@ -10,12 +10,18 @@ Key functionality tested:
 3. Parameter validation and error handling
 4. File output and overwrite behavior
 5. Integration with underlying processing modules
+6. JSON config file loading for behavior parameters
 """
 
 from unittest.mock import MagicMock, patch
 import pytest
 
 from jabs_postprocess.cli.main import app
+from jabs_postprocess.utils.metadata import (
+    DEFAULT_INTERPOLATE,
+    DEFAULT_MIN_BOUT,
+    DEFAULT_STITCH,
+)
 
 
 class TestGenerateTables:
@@ -89,11 +95,12 @@ class TestGenerateTables:
         assert call_args.kwargs["out_prefix"] == out_prefix
         assert len(call_args.kwargs["behaviors"]) == behavior_count
 
+        # When using --behavior (simple names), default values should be used
         for i, behavior_config in enumerate(call_args.kwargs["behaviors"]):
             assert behavior_config["behavior"] == f"behavior{i}"
-            assert "interpolate_size" in behavior_config
-            assert "stitch_gap" in behavior_config
-            assert "min_bout_length" in behavior_config
+            assert behavior_config["interpolate_size"] == DEFAULT_INTERPOLATE
+            assert behavior_config["stitch_gap"] == DEFAULT_STITCH
+            assert behavior_config["min_bout_length"] == DEFAULT_MIN_BOUT
 
         # Verify statistics handling
         if add_statistics or add_statistics is None:
@@ -112,8 +119,10 @@ class TestGenerateTables:
         ],
     )
     @patch("jabs_postprocess.cli.main.generate_behavior_tables")
-    def test_generate_tables_with_parameters(
+    @patch("jabs_postprocess.cli.main.load_json")
+    def test_generate_tables_with_json_config(
         self,
+        mock_load_json,
         mock_generate_module,
         runner,
         mock_project_folder,
@@ -122,10 +131,12 @@ class TestGenerateTables:
         stitch_gap,
         min_bout_length,
         out_bin_size,
+        tmp_path,
     ):
-        """Test table generation with various parameter combinations.
+        """Test table generation with JSON config file for custom parameters.
 
         Args:
+            mock_load_json: Mock load_json function
             mock_generate_module: Mock generate_behavior_tables module
             runner: CLI test runner
             mock_project_folder: Mock project directory
@@ -134,6 +145,7 @@ class TestGenerateTables:
             stitch_gap: Stitch gap parameter
             min_bout_length: Minimum bout length parameter
             out_bin_size: Output bin size parameter
+            tmp_path: Temporary directory for config file
         """
         # Arrange
         behavior = "test_behavior"
@@ -141,24 +153,38 @@ class TestGenerateTables:
             ("bout.csv", "summary.csv")
         ]
 
+        # Create behavior config with optional parameters
+        behavior_config_data = {
+            "behaviors": [
+                {
+                    "behavior": behavior,
+                }
+            ]
+        }
+        if interpolate_size is not None:
+            behavior_config_data["behaviors"][0]["interpolate_size"] = interpolate_size
+        if stitch_gap is not None:
+            behavior_config_data["behaviors"][0]["stitch_gap"] = stitch_gap
+        if min_bout_length is not None:
+            behavior_config_data["behaviors"][0]["min_bout_length"] = min_bout_length
+
+        # Mock the load_json function
+        mock_load_json.return_value = behavior_config_data
+
+        # Create config file path
+        config_file = tmp_path / "behavior_config.json"
+
         cmd_args = [
             "generate-tables",
             "--project-folder",
             str(mock_project_folder),
-            "--behavior",
-            behavior,
+            "--behavior-config",
+            str(config_file),
             "--feature-folder",
             str(mock_feature_folder),
             "--out-bin-size",
             str(out_bin_size),
         ]
-
-        if interpolate_size is not None:
-            cmd_args.extend(["--interpolate-size", str(interpolate_size)])
-        if stitch_gap is not None:
-            cmd_args.extend(["--stitch-gap", str(stitch_gap)])
-        if min_bout_length is not None:
-            cmd_args.extend(["--min-bout-length", str(min_bout_length)])
 
         # Act
         result = runner.invoke(app, cmd_args)
@@ -171,9 +197,18 @@ class TestGenerateTables:
         assert call_args.kwargs["out_bin_size"] == out_bin_size
 
         behavior_config = call_args.kwargs["behaviors"][0]
-        assert behavior_config["interpolate_size"] == interpolate_size
-        assert behavior_config["stitch_gap"] == stitch_gap
-        assert behavior_config["min_bout_length"] == min_bout_length
+        # Check that parameters were set correctly (or use defaults if None)
+        expected_interpolate = (
+            interpolate_size if interpolate_size is not None else DEFAULT_INTERPOLATE
+        )
+        expected_stitch = stitch_gap if stitch_gap is not None else DEFAULT_STITCH
+        expected_min_bout = (
+            min_bout_length if min_bout_length is not None else DEFAULT_MIN_BOUT
+        )
+
+        assert behavior_config["interpolate_size"] == expected_interpolate
+        assert behavior_config["stitch_gap"] == expected_stitch
+        assert behavior_config["min_bout_length"] == expected_min_bout
 
     @pytest.mark.parametrize("overwrite", [True, False])
     @patch("jabs_postprocess.cli.main.generate_behavior_tables")
@@ -333,5 +368,8 @@ class TestGenerateTables:
         result = runner.invoke(app, cmd_args)
 
         # Assert
-        assert result.exit_code != 0
-        assert "Missing option" in result.stdout
+        assert result.exit_code == 1
+        assert (
+            "Must provide either --behavior-config or --behavior options"
+            in result.stdout
+        )
