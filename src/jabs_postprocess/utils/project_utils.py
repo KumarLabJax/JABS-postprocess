@@ -512,6 +512,11 @@ class Table:
             "closest_id",
             "closest_lixit",
             "closest_corner",
+            "latency_to_first_bout",
+            "avg_bout_duration",
+            "total_bout_count",
+            "bout_duration_std",
+            "bout_duration_var",
         ]
         if data is not None:
             self._check_fields()
