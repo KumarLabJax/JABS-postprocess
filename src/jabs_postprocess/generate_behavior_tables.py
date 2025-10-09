@@ -248,9 +248,7 @@ def merge_multiple_behavior_tables(
         # Merge bin tables if any exist
         bin_output = None
         if bin_tables:
-            bin_output, _ = merge_behavior_tables(
-                bin_tables, output_prefix, overwrite
-            )
+            bin_output, _ = merge_behavior_tables(bin_tables, output_prefix, overwrite)
 
         results[behavior_name] = (bout_output, bin_output)
 
