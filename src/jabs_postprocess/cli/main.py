@@ -539,9 +539,9 @@ def merge_multiple_tables(
         typer.Option(help="File pattern to match behavior tables"),
     ] = "*.csv",
     output_prefix: Annotated[
-        str,
+        Optional[str],
         typer.Option(help="File prefix for merged output tables"),
-    ] = "merged_behavior",
+    ] = None,
     overwrite: Annotated[bool, typer.Option(help="Overwrites output files")] = False,
 ):
     """Merge multiple sets of behavior tables, automatically grouping by behavior.

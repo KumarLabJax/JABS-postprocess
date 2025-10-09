@@ -121,14 +121,14 @@ def process_multiple_behaviors(
 
 def merge_behavior_tables(
     input_tables: List[Path],
-    output_prefix: str = "merged_behavior",
+    output_prefix: str | None = None,
     overwrite: bool = False,
 ) -> Tuple[str, str]:
     """Merge multiple behavior tables for the same behavior.
 
     Args:
             input_tables: List of paths to behavior table files to merge
-            output_prefix: Prefix for output filenames
+            output_prefix: Optional prefix for output filenames
             overwrite: Whether to overwrite existing files
 
     Returns:
@@ -174,13 +174,17 @@ def merge_behavior_tables(
 
         tables.append(table)
 
+    output_file = behavior_name.replace(" ", "_").lower()
+    if output_prefix:
+        output_file = f"{output_prefix}_{output_file}"
+
     # Merge the tables using the existing combine_data method
     if table_type == "bout":
         merged_table = BoutTable.combine_data(tables)
-        output_file = f"{output_prefix}_{behavior_name}_bouts_merged.csv"
+        output_file = f"{output_file}_bouts_merged.csv"
     else:
         merged_table = BinTable.combine_data(tables)
-        output_file = f"{output_prefix}_{behavior_name}_summaries_merged.csv"
+        output_file = f"{output_file}_summaries_merged.csv"
 
     # Write the merged table
     merged_table.to_file(output_file, overwrite)
@@ -193,14 +197,14 @@ def merge_behavior_tables(
 
 def merge_multiple_behavior_tables(
     table_groups: Dict[str, List[Path]],
-    output_prefix: str = "merged_behavior",
+    output_prefix: str | None = None,
     overwrite: bool = False,
 ) -> Dict[str, Tuple[str, str]]:
     """Merge multiple sets of behavior tables grouped by behavior.
 
     Args:
             table_groups: Dictionary mapping behavior names to lists of table file paths
-            output_prefix: Prefix for output filenames
+            output_prefix: Optional prefix for output filenames
             overwrite: Whether to overwrite existing files
 
     Returns:
@@ -238,14 +242,14 @@ def merge_multiple_behavior_tables(
         bout_output = None
         if bout_tables:
             bout_output, _ = merge_behavior_tables(
-                bout_tables, f"{output_prefix}_{behavior_name}_bouts", overwrite
+                bout_tables, output_prefix, overwrite
             )
 
         # Merge bin tables if any exist
         bin_output = None
         if bin_tables:
             bin_output, _ = merge_behavior_tables(
-                bin_tables, f"{output_prefix}_{behavior_name}_summaries", overwrite
+                bin_tables, output_prefix, overwrite
             )
 
         results[behavior_name] = (bout_output, bin_output)
