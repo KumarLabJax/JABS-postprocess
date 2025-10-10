@@ -749,7 +749,7 @@ def test_merge_multiple_behavior_tables():
 
         # Mock merge_behavior_tables to return expected outputs
         def merge_side_effect(tables, prefix, overwrite):
-            behavior = prefix.split("_")[1]
+            behavior = prefix.split("_")[0]
             return f"merged_{behavior}_output.csv", f"merged_{behavior}_output.csv"
 
         mock_merge.side_effect = merge_side_effect

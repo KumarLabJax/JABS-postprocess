@@ -74,6 +74,8 @@ class TestMergeMultipleTables:
             "merge-multiple-tables",
             "--table-folder",
             str(table_folder),
+            "--output-prefix",
+            "merged_behavior",
         ]
 
         if overwrite:

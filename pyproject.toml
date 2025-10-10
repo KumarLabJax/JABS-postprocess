@@ -1,6 +1,6 @@
 [project]
 name = "jabs-postprocess"
-version = "0.4.1"
+version = "0.4.2"
 description = "A python library for JABS postprocessing utilities."
 readme = "README.md"
 license = "LicenseRef-PLATFORM-LICENSE-AGREEMENT-FOR-NON-COMMERCIAL-USE"
