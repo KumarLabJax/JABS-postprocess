@@ -1,0 +1,332 @@
+# ================================================================================
+# COMPREHENSIVE CONFIGURATION TEMPLATE
+# ================================================================================
+# This template demonstrates ALL available configuration options and syntax
+# patterns supported by the JABS-postprocess heuristic classification system.
+# 
+# Use this as a reference guide when creating your own behavior definitions.
+# Copy relevant sections and modify parameters for your specific use case.
+# ================================================================================
+
+# SECTION 1: BEHAVIOR IDENTIFICATION
+# ===================================
+# REQUIRED: The behavior name that will appear in all output files
+# - Must be descriptive and unique within your analysis pipeline
+# - Avoid special characters that might cause file naming issues
+# - Use spaces for readability; underscores will be added automatically in filenames
+behavior: 
+  Template Behavior Name
+
+# SECTION 2: POST-PROCESSING PARAMETERS  
+# ======================================
+# These parameters refine raw classifications into meaningful behavioral bouts
+# All parameters are optional; if omitted, defaults from the parsing system are used
+
+# interpolate: Fill gaps in behavior detection
+# - Type: Integer (number of frames)
+# - Purpose: Handles brief tracking errors or ambiguous classifications
+# - Typical range: 1-10 frames
+# - Default: Usually 5 frames
+# - Example: At 30 fps, 5 frames = 167ms of gap filling
+interpolate:
+  5    # Recommended: 3-7 frames for most behaviors
+
+# stitch: Merge nearby behavior bouts
+# - Type: Integer (number of frames)  
+# - Purpose: Combines separated bouts of the same behavior
+# - Typical range: 5-30 frames
+# - Default: Usually 5 frames
+# - Example: Locomotion bouts separated by brief pauses get merged
+stitch:
+  10   # Recommended: 5-15 frames depending on behavior continuity
+
+# min_bout: Minimum duration for valid behavior episodes
+# - Type: Integer (number of frames)
+# - Purpose: Filters out brief, likely spurious classifications
+# - Typical range: 10-120 frames
+# - Default: Usually 15 frames
+# - Example: At 30 fps, 30 frames = 1 second minimum episode
+min_bout:
+  30   # Recommended: 15-60 frames for most behaviors
+
+# SECTION 3: BEHAVIOR CLASSIFICATION RULE
+# ========================================
+# This is the core logic defining when the behavior occurs
+# The 'definition' section must contain exactly one top-level operator
+
+definition:
+  # TOP-LEVEL LOGICAL OPERATORS
+  # ---------------------------
+  # Choose ONE of these as your main structure:
+
+  # Option 1: ALL conditions must be true (logical AND)
+  # Used when multiple criteria must be satisfied simultaneously
+  all:
+    # INEQUALITY OPERATORS
+    # --------------------
+    # Compare features or expressions against thresholds
+
+    # Greater than comparisons
+    # Available aliases: ">", "gt", "greater than"
+    - greater than:
+        - features/per_frame/centroid_velocity_mag centroid_velocity_mag
+        - 2.0    # Threshold value (can be integer or float)
+
+    # Less than comparisons  
+    # Available aliases: "<", "lt", "less than"
+    - less than:
+        - features/per_frame/point_speeds NOSE speed
+        - 15.0
+
+    # Greater than or equal
+    # Available aliases: ">=", "=>", "gte", "greater than equal", "greater than or equal"
+    - greater than or equal:
+        - wall_distances/wall_0
+        - 5.0
+
+    # Less than or equal
+    # Available aliases: "<=", "=<", "lte", "less than equal", "less than or equal"  
+    - less than or equal:
+        - features/per_frame/centroid_velocity_mag centroid_velocity_mag
+        - 20.0
+
+    # NESTED LOGICAL OPERATORS
+    # ------------------------
+    # You can nest logical operators for complex conditions
+
+    # ANY: At least one condition must be true (logical OR)
+    # Available aliases: "any", "or", "|"
+    - any:
+        - greater than:
+            - features/per_frame/point_speeds FRONT_PAW_L speed
+            - 3.0
+        - greater than:
+            - features/per_frame/point_speeds FRONT_PAW_R speed
+            - 3.0
+
+    # MINIMUM: At least N conditions must be true
+    # Available aliases: "minimum", "at least"
+    - minimum:
+        - 2    # At least 2 of the following conditions must be true
+        - greater than:
+            - wall_distances/wall_0
+            - 10.0
+        - greater than:
+            - wall_distances/wall_1  
+            - 10.0
+        - greater than:
+            - wall_distances/wall_2
+            - 10.0
+        - greater than:
+            - wall_distances/wall_3
+            - 10.0
+
+    # MAXIMUM: At most N conditions can be true
+    # Available aliases: "maximum", "at most"  
+    - maximum:
+        - 1    # At most 1 of the following can be true
+        - less than:
+            - wall_distances/wall_0
+            - 5.0
+        - less than:
+            - wall_distances/wall_1
+            - 5.0
+
+    # MATHEMATICAL EXPRESSIONS
+    # ========================
+    # You can perform calculations on features before comparison
+
+    # ADDITION
+    - greater than:
+        - add:
+            - features/per_frame/point_speeds FRONT_PAW_L speed
+            - features/per_frame/point_speeds FRONT_PAW_R speed
+        - 8.0    # Sum of both front paw speeds > 8.0
+
+    # SUBTRACTION  
+    - greater than:
+        - subtract:
+            - features/per_frame/point_speeds NOSE speed
+            - features/per_frame/centroid_velocity_mag centroid_velocity_mag
+        - 1.0    # Nose speed exceeds body speed by > 1.0
+
+    # MULTIPLICATION
+    - less than:
+        - multiply:
+            - avg_wall_length
+            - 0.2    # 20% of average wall length
+        - wall_distances/wall_0
+
+    # DIVISION
+    - greater than:
+        - divide:
+            - features/per_frame/point_speeds NOSE speed
+            - features/per_frame/centroid_velocity_mag centroid_velocity_mag  
+        - 1.5    # Nose speed ratio to body speed > 1.5
+
+    # ABSOLUTE VALUE
+    - less than:
+        - abs:
+            - subtract:
+                - features/per_frame/head_angle head_angle
+                - features/per_frame/wall_angle_0 wall_0_angle
+        - 45.0   # Absolute angular difference < 45 degrees
+
+# ALTERNATIVE TOP-LEVEL STRUCTURES
+# =================================
+# Instead of 'all', you could use any of these as your main operator:
+
+# Single simple condition (most common for basic behaviors)
+# definition:
+#   greater than:
+#     - features/per_frame/centroid_velocity_mag centroid_velocity_mag
+#     - 3.0
+
+# Any condition must be true
+# definition:
+#   any:
+#     - greater than:
+#         - features/per_frame/point_speeds NOSE speed
+#         - 5.0
+#     - greater than:
+#         - features/per_frame/centroid_velocity_mag centroid_velocity_mag
+#         - 3.0
+
+# At least N conditions 
+# definition:
+#   minimum:
+#     - 3
+#     - [list of conditions...]
+
+# At most N conditions
+# definition:  
+#   maximum:
+#     - 2
+#     - [list of conditions...]
+
+# SECTION 4: COMMON FEATURE PATHS
+# ================================
+# Reference guide for frequently used features in JABS-postprocess
+
+# MOVEMENT/VELOCITY FEATURES:
+# ---------------------------
+# features/per_frame/centroid_velocity_mag          # Overall body movement speed
+# features/per_frame/point_speeds NOSE speed        # Nose/snout movement
+# features/per_frame/point_speeds BASE_NECK speed   # Neck base movement
+# features/per_frame/point_speeds BASE_TAIL speed   # Tail base movement  
+# features/per_frame/point_speeds FRONT_PAW_L speed # Left front paw
+# features/per_frame/point_speeds FRONT_PAW_R speed # Right front paw
+# features/per_frame/point_speeds BACK_PAW_L speed  # Left back paw
+# features/per_frame/point_speeds BACK_PAW_R speed  # Right back paw
+
+# SPATIAL/POSITION FEATURES:
+# --------------------------
+# wall_distances/wall_0                             # Distance to wall 0
+# wall_distances/wall_1                             # Distance to wall 1  
+# wall_distances/wall_2                             # Distance to wall 2
+# wall_distances/wall_3                             # Distance to wall 3
+# features/per_frame/corner_distances distance      # Distance to nearest corner
+# avg_wall_length                                   # Average arena wall length (constant)
+
+# ORIENTATION FEATURES:
+# ---------------------  
+# features/per_frame/head_angle head_angle          # Head orientation angle
+# features/per_frame/wall_angle_0 wall_0_angle     # Angle relative to wall 0
+# features/per_frame/wall_angle_1 wall_1_angle     # Angle relative to wall 1
+# features/per_frame/wall_angle_2 wall_2_angle     # Angle relative to wall 2
+# features/per_frame/wall_angle_3 wall_3_angle     # Angle relative to wall 3
+
+# SHAPE/SIZE FEATURES (if available):
+# -----------------------------------
+# features/per_frame/shape_descriptor area          # Mouse body area
+# features/per_frame/shape_descriptor perimeter     # Mouse body perimeter
+# features/per_frame/shape_descriptor centroid_speed # Alternative centroid speed
+
+# SECTION 5: COMMON PARAMETER VALUES
+# ===================================
+
+# VELOCITY THRESHOLDS (cm/second):
+# --------------------------------
+# 0.5-1.0:   Micro-movements, grooming, subtle position adjustments
+# 1.0-2.0:   Slow movements, cautious exploration, sniffing
+# 2.0-5.0:   Moderate locomotion, typical walking/exploration
+# 5.0-15.0:  Active locomotion, faster walking, investigation
+# 15.0-30.0: Running, escape responses, vigorous movement
+# >30.0:     Very fast locomotion, panic responses
+
+# DISTANCE THRESHOLDS (cm or arena fractions):
+# ---------------------------------------------
+# Wall proximity:
+# - avg_wall_length/10 (10%): Very close to wall
+# - avg_wall_length/5  (20%): Near wall, periphery zone  
+# - avg_wall_length/4  (25%): Moderate wall distance
+# - avg_wall_length/3  (33%): Center-periphery boundary
+# - avg_wall_length/2  (50%): Arena center
+
+# TEMPORAL THRESHOLDS (frames at 30 fps):
+# ----------------------------------------
+# 5-10 frames:   Brief events, micro-behaviors (0.17-0.33 seconds)
+# 15-30 frames:  Short behaviors, quick interactions (0.5-1.0 seconds)  
+# 30-90 frames:  Moderate behaviors, exploration bouts (1-3 seconds)
+# 90-300 frames: Extended behaviors, sustained activities (3-10 seconds)
+# >300 frames:   Long-duration states, behavioral epochs (>10 seconds)
+
+# ANGULAR THRESHOLDS (degrees):
+# -----------------------------
+# 0-15°:   Very aligned, parallel orientation
+# 15-45°:  Moderate angle difference
+# 45-90°:  Significant angle difference
+# 90-135°: Perpendicular to opposite orientations
+# 135-180°: Opposing orientations
+
+# SECTION 6: TROUBLESHOOTING GUIDE
+# =================================
+
+# COMMON ISSUES AND SOLUTIONS:
+# -----------------------------
+
+# Issue: "No behavior detected" 
+# Solution: Lower thresholds, check feature availability, verify data paths
+
+# Issue: "Too much behavior detected"
+# Solution: Raise thresholds, add additional constraining conditions
+
+# Issue: "Fragmented behavior bouts"
+# Solution: Increase 'stitch' parameter, decrease 'min_bout' requirement
+
+# Issue: "Brief spurious detections"  
+# Solution: Increase 'min_bout' parameter, add sustained condition requirements
+
+# Issue: "Behavior bleeds into other states"
+# Solution: Add exclusion conditions (e.g., not freezing, not grooming)
+
+# Issue: "YAML parsing errors"
+# Solution: Check indentation (use spaces, not tabs), validate syntax
+
+# Issue: "Feature not found"
+# Solution: Verify feature paths exist in your data, check HDF5 file structure
+
+# VALIDATION WORKFLOW:
+# --------------------
+# 1. Start with simple single-condition definitions
+# 2. Test with known positive/negative examples
+# 3. Gradually add complexity and additional conditions  
+# 4. Tune parameters based on visual inspection of results
+# 5. Validate against manual scoring or established protocols
+# 6. Document final parameter choices and biological rationale
+
+# PERFORMANCE OPTIMIZATION:
+# -------------------------
+# • Place most selective conditions first in 'all' blocks
+# • Use 'any' sparingly as it requires evaluating multiple conditions
+# • Avoid deeply nested expressions when simple alternatives exist
+# • Cache commonly used mathematical expressions
+# • Consider computational cost of complex windowed operations
+
+# FILE ORGANIZATION:
+# ------------------
+# • Use descriptive behavior names that match your experimental design
+# • Keep related configurations in the same directory
+# • Document parameter choices and validation results
+# • Version control configuration files along with analysis code
+# • Share validated configurations with collaborators for reproducibility
