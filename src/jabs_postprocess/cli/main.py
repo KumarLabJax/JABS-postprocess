@@ -155,7 +155,22 @@ def evaluate_ground_truth(
     ),
     filter_ground_truth: bool = typer.Option(
         False,
-        help="Apply filters to ground truth data (default is only to filter predictions)",
+        help=(
+            "Enable extra filtered outputs and apply stitch/filter to BOTH GT and predictions. "
+            "Use together with --stitch-value-filter and --filter-value-filter."
+        ),
+    ),
+    stitch_value_filter: Optional[int] = typer.Option(
+        None,
+        "--stitch-value-filter",
+        "--stitch_value_filter",
+        help="Stitch (frames) to use for filtered outputs",
+    ),
+    filter_value_filter: Optional[int] = typer.Option(
+        None,
+        "--filter-value-filter",
+        "--filter_value_filter",
+        help="Minimum bout (frames) to use for filtered outputs",
     ),
     trim_time: Optional[int] = typer.Option(
         None,
@@ -178,6 +193,18 @@ def evaluate_ground_truth(
             f"Prediction folder does not exist: {prediction_folder}"
         )
 
+    # Convert CLI options into the dict expected by the underlying function
+    filter_gt_dict: Optional[dict] = None
+    if filter_ground_truth:
+        if stitch_value_filter is None or filter_value_filter is None:
+            raise typer.BadParameter(
+                "When using --filter-ground-truth, you must also provide --stitch-value-filter and --filter-value-filter."
+            )
+        filter_gt_dict = {
+            "stitch": int(stitch_value_filter),
+            "filter": int(filter_value_filter),
+        }
+
     # Call the refactored function with individual parameters
     compare_gt.evaluate_ground_truth(
         behavior=behavior,
@@ -187,7 +214,7 @@ def evaluate_ground_truth(
         stitch_scan=stitch_scan,
         filter_scan=filter_scan,
         iou_thresholds=iou_thresholds,
-        filter_ground_truth=filter_ground_truth,
+        filter_ground_truth=filter_gt_dict,
         trim_time=trim_time,
     )
 
