@@ -176,8 +176,9 @@ Summaries included:
 * `avg_bout_duration` : Average bout duration per animal (in time bin)
 * `bout_duration_std` : Standard deviation of bout durations (in time bin)
 * `bout_duration_var` : Variance of bout durations (in time bin)
-* `latency_to_first_bout` : Frame number of first behavior bout in the time bin
+* `latency_to_first_prediction` : Frame number of first behavior prediction in the time bin
     * Frame is relative to the experiment start, not the time bin
+* `latency_to_last_prediction` : Frame number of last behavior prediction in the time bin
 * `not_behavior_dist`\* : Total distance traveled during not behavior bouts
 * `behavior_dist`\* : Total distance traveled during behavior bouts
 

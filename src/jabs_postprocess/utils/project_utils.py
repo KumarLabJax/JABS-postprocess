@@ -1043,9 +1043,21 @@ class BoutTable(Table):
             else:
                 results["bout_duration_var"] = np.nan
                 results["bout_duration_std"] = np.nan
-            results["latency_to_first_bout"] = bins_to_summarize.loc[
-                bins_to_summarize["is_behavior"] == 1, "start"
-            ].head(1)
+            results["latency_to_first_prediction"] = (
+                bins_to_summarize.loc[bins_to_summarize["is_behavior"] == 1, "start"]
+                .head(1)
+                .values
+            )
+            results["latency_to_last_prediction"] = (
+                bins_to_summarize.loc[bins_to_summarize["is_behavior"] == 1, "start"]
+                .tail(1)
+                .values
+                + bins_to_summarize.loc[
+                    bins_to_summarize["is_behavior"] == 1, "duration"
+                ]
+                .tail(1)
+                .values
+            )
             if "distance" in bins_to_summarize.keys():
                 results["not_behavior_dist"] = bins_to_summarize.loc[
                     bins_to_summarize["is_behavior"] == 0, "calc_dist"
@@ -1137,7 +1149,8 @@ class BinTable(Table):
             "avg_bout_duration",
             "bout_duration_std",
             "bout_duration_var",
-            "latency_to_first_bout",
+            "latency_to_first_prediction",
+            "latency_to_last_prediction",
         ]
         self._check_fields()
 
