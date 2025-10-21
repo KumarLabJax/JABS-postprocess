@@ -901,7 +901,9 @@ class BoutTable(Table):
                 Binned event data describing the event data.
 
         Notes:
-                Binned data describes event data as summaries. For each state, total time and distance travelled are provided. Additionally, the number of behavior events are counted.
+                Binned data describes event data as summaries.
+                For each state, total time and distance travelled are provided.
+                Additionally, the number of behavior events are counted.
                 Events that span multiple bins are split between them based on the percent in each, allowing fractional bout counts.
         """
         # Get the range that the experiment spans
@@ -1015,18 +1017,32 @@ class BoutTable(Table):
             results["time_behavior"] = bins_to_summarize.loc[
                 bins_to_summarize["is_behavior"] == 1, "duration"
             ].sum()
-            results["bout_behavior"] = len(
-                bins_to_summarize.loc[bins_to_summarize["is_behavior"] == 1]
+            results["bout_behavior"] = (
+                bins_to_summarize.loc[
+                    bins_to_summarize["is_behavior"] == 1, "percent_bout"
+                ]
+            ).sum()
+            results["avg_bout_duration"] = (
+                results["time_behavior"] / results["bout_behavior"]
             )
-            results["avg_bout_duration"] = bins_to_summarize.loc[
-                bins_to_summarize["is_behavior"] == 1, "duration"
-            ].mean()
-            results["bout_duration_std"] = bins_to_summarize.loc[
-                bins_to_summarize["is_behavior"] == 1, "duration"
-            ].std()
-            results["bout_duration_var"] = bins_to_summarize.loc[
-                bins_to_summarize["is_behavior"] == 1, "duration"
-            ].var()
+            if results["bout_behavior"] > 1:
+                results["bout_duration_var"] = np.sum(
+                    np.square(
+                        (
+                            bins_to_summarize.loc[
+                                bins_to_summarize["is_behavior"] == 1, "duration"
+                            ]
+                            / bins_to_summarize.loc[
+                                bins_to_summarize["is_behavior"] == 1, "percent_bout"
+                            ]
+                        )
+                        - results["avg_bout_duration"]
+                    )
+                ) / (results["bout_behavior"] - 1)
+                results["bout_duration_std"] = np.sqrt(results["bout_duration_var"])
+            else:
+                results["bout_duration_var"] = np.nan
+                results["bout_duration_std"] = np.nan
             results["latency_to_first_bout"] = bins_to_summarize.loc[
                 bins_to_summarize["is_behavior"] == 1, "start"
             ].head(1)
