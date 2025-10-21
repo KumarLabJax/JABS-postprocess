@@ -444,7 +444,7 @@ class TestBoutTableAddBoutStatistics:
 
     def test_add_bout_statistics_variance_calculation(self):
         """Test that variance and standard deviation are calculated correctly."""
-        # Arrange - Create data with known variance
+        # Arrange: Create data with known variance
         data = pd.DataFrame(
             {
                 "animal_idx": [0, 0, 0],
@@ -515,3 +515,296 @@ class TestBoutTableAddBoutStatistics:
             )
 
         # No rows to check values, but shouldn't crash
+
+
+class TestBoutTableBoutsToBinsWeightedStats:
+    """Test suite for BoutTable.bouts_to_bins method focusing on weighted statistics."""
+
+    def test_bouts_to_bins_weighted_bout_count_with_split_bouts(self):
+        """Test that bout_behavior correctly uses weighted percent_bout sum.
+
+        When bouts span multiple bins, they should be counted fractionally
+        based on how much of each bout falls within each bin.
+        """
+        # Arrange: Create a simple scenario with one bout split across bins
+        # Bin 1: 0-1800 frames (1 minute at 30fps)
+        # Bin 2: 1800-3600 frames
+        # Bout: starts at frame 1500, duration 600 (spans both bins)
+        data = pd.DataFrame(
+            {
+                "animal_idx": [0],
+                "video_name": ["vid1"],
+                "start": [1500],
+                "duration": [600],  # 300 frames in bin 1, 300 frames in bin 2
+                "is_behavior": [1],
+                "exp_prefix": ["exp1"],
+                "time": ["1970-01-01 00:00:00"],
+            }
+        )
+
+        # Act
+        result = BoutTable.bouts_to_bins(data, bin_size_minutes=1, fps=30)
+
+        # Assert
+        # The first bin should have 300/600 = 0.5 of the bout
+        # The second bin should have 300/600 = 0.5 of the bout
+        assert len(result) == 2, "Should have 2 bins"
+        assert abs(result.iloc[0]["bout_behavior"] - 0.5) < 0.01, (
+            "First bin should count 0.5 bouts"
+        )
+        assert abs(result.iloc[1]["bout_behavior"] - 0.5) < 0.01, (
+            "Second bin should count 0.5 bouts"
+        )
+
+    def test_bouts_to_bins_weighted_avg_bout_duration(self):
+        """Test that avg_bout_duration is calculated using weighted statistics.
+
+        The weighted mean should account for partial bouts in each bin.
+        """
+        # Arrange: Create scenario with multiple bouts of different sizes
+        # Bin: 0-1800 frames
+        # Bout 1: 100 frames at start 100
+        # Bout 2: 200 frames at start 500
+        data = pd.DataFrame(
+            {
+                "animal_idx": [0, 0],
+                "video_name": ["vid1", "vid1"],
+                "start": [100, 500],
+                "duration": [100, 200],
+                "is_behavior": [1, 1],
+                "exp_prefix": ["exp1", "exp1"],
+                "time": ["1970-01-01 00:00:00", "1970-01-01 00:00:00"],
+            }
+        )
+
+        # Act
+        result = BoutTable.bouts_to_bins(data, bin_size_minutes=1, fps=30)
+
+        # Assert
+        # Both bouts are fully in the first bin (percent_bout = 1.0 for each)
+        # Weighted mean = (100*1.0 + 200*1.0) / (1.0 + 1.0) = 300/2 = 150
+        assert len(result) == 1, "Should have 1 bin"
+        expected_avg = 150.0
+        assert abs(result.iloc[0]["avg_bout_duration"] - expected_avg) < 0.1, (
+            f"Expected avg_bout_duration to be {expected_avg}"
+        )
+
+    def test_bouts_to_bins_weighted_variance_and_std(self):
+        """Test that variance and std are calculated correctly with weighting."""
+        # Arrange: Create data with known variance
+        # Three bouts fully in one bin: durations 10, 20, 30
+        data = pd.DataFrame(
+            {
+                "animal_idx": [0, 0, 0],
+                "video_name": ["vid1"] * 3,
+                "start": [100, 500, 900],
+                "duration": [10, 20, 30],
+                "is_behavior": [1, 1, 1],
+                "exp_prefix": ["exp1"] * 3,
+                "time": ["1970-01-01 00:00:00"] * 3,
+            }
+        )
+
+        # Act
+        result = BoutTable.bouts_to_bins(data, bin_size_minutes=1, fps=30)
+
+        # Assert
+        # All bouts fully in bin, percent_bout = 1.0 for all
+        # Weighted mean = (10*1 + 20*1 + 30*1) / 3 = 20
+        # Weighted variance formula used in code:
+        # sum(percent_bout * (duration/percent_bout - mean)^2) / denom
+        # where denom = (n-1) * sum(percent_bout) / n = 2 * 3 / 3 = 2
+        # = (1*(10-20)^2 + 1*(20-20)^2 + 1*(30-20)^2) / 2
+        # = (100 + 0 + 100) / 2 = 100
+        expected_var = 100.0
+        expected_std = 10.0
+
+        assert abs(result.iloc[0]["avg_bout_duration"] - 20.0) < 0.1
+        assert abs(result.iloc[0]["bout_duration_var"] - expected_var) < 0.1, (
+            f"Expected variance to be {expected_var}"
+        )
+        assert abs(result.iloc[0]["bout_duration_std"] - expected_std) < 0.1, (
+            f"Expected std to be {expected_std}"
+        )
+
+    def test_bouts_to_bins_variance_with_single_bout(self):
+        """Test that variance and std are NaN when only one bout exists."""
+        # Arrange: Single bout
+        data = pd.DataFrame(
+            {
+                "animal_idx": [0],
+                "video_name": ["vid1"],
+                "start": [100],
+                "duration": [100],
+                "is_behavior": [1],
+                "exp_prefix": ["exp1"],
+                "time": ["1970-01-01 00:00:00"],
+            }
+        )
+
+        # Act
+        result = BoutTable.bouts_to_bins(data, bin_size_minutes=1, fps=30)
+
+        # Assert
+        # With only 1 bout, bout_behavior = 1, which triggers the else branch
+        assert result.iloc[0]["bout_behavior"] == 1.0
+        assert pd.isna(result.iloc[0]["bout_duration_var"]), (
+            "Variance should be NaN for single bout"
+        )
+        assert pd.isna(result.iloc[0]["bout_duration_std"]), (
+            "Std should be NaN for single bout"
+        )
+
+    def test_bouts_to_bins_latency_to_first_prediction(self):
+        """Test that latency_to_first_prediction captures the start of the first bout."""
+        # Arrange: Multiple bouts in one bin
+        data = pd.DataFrame(
+            {
+                "animal_idx": [0, 0, 0],
+                "video_name": ["vid1"] * 3,
+                "start": [500, 200, 800],  # Unordered on purpose
+                "duration": [50, 30, 40],
+                "is_behavior": [1, 1, 1],
+                "exp_prefix": ["exp1"] * 3,
+                "time": ["1970-01-01 00:00:00"] * 3,
+            }
+        )
+
+        # Act
+        result = BoutTable.bouts_to_bins(data, bin_size_minutes=1, fps=30)
+
+        # Assert
+        # First prediction should be at frame 200 (earliest start)
+        assert result.iloc[0]["latency_to_first_prediction"] == 200, (
+            "Expected first prediction at frame 200"
+        )
+
+    def test_bouts_to_bins_latency_to_last_prediction(self):
+        """Test that latency_to_last_prediction captures the end of the last bout."""
+        # Arrange: Multiple bouts in one bin
+        data = pd.DataFrame(
+            {
+                "animal_idx": [0, 0, 0],
+                "video_name": ["vid1"] * 3,
+                "start": [200, 500, 800],
+                "duration": [30, 50, 40],  # Last bout ends at 800+40=840
+                "is_behavior": [1, 1, 1],
+                "exp_prefix": ["exp1"] * 3,
+                "time": ["1970-01-01 00:00:00"] * 3,
+            }
+        )
+
+        # Act
+        result = BoutTable.bouts_to_bins(data, bin_size_minutes=1, fps=30)
+
+        # Assert
+        # Last prediction should end at frame 840 (800 + 40)
+        assert result.iloc[0]["latency_to_last_prediction"] == 840, (
+            "Expected last prediction to end at frame 840"
+        )
+
+    def test_bouts_to_bins_no_behavior_bouts(self):
+        """Test handling when there are no behavior bouts in a bin."""
+        # Arrange: Only non-behavior events
+        data = pd.DataFrame(
+            {
+                "animal_idx": [0, 0],
+                "video_name": ["vid1"] * 2,
+                "start": [100, 500],
+                "duration": [200, 300],
+                "is_behavior": [0, -1],  # No behavior
+                "exp_prefix": ["exp1"] * 2,
+                "time": ["1970-01-01 00:00:00"] * 2,
+            }
+        )
+
+        # Act
+        result = BoutTable.bouts_to_bins(data, bin_size_minutes=1, fps=30)
+
+        # Assert
+        assert result.iloc[0]["bout_behavior"] == 0
+        assert result.iloc[0]["time_behavior"] == 0
+        # avg_bout_duration with 0 bouts: division by zero should give inf or nan
+        # The actual behavior depends on numpy settings, but we expect either
+        assert pd.isna(result.iloc[0]["avg_bout_duration"]) or np.isinf(
+            result.iloc[0]["avg_bout_duration"]
+        )
+
+    def test_bouts_to_bins_split_bout_weighted_statistics(self):
+        """Test weighted statistics when a single bout is split across bins.
+
+        This is a critical test for the weighted statistics - a bout split
+        50/50 across two bins should contribute 0.5 to each bin's statistics.
+        """
+        # Arrange: One long bout split exactly in half across 2 bins
+        # Bin 1: frames 0-1800 (1 min at 30fps)
+        # Bin 2: frames 1800-3600
+        # Bout: frames 1500-2100 (duration 600, split 300/300)
+        data = pd.DataFrame(
+            {
+                "animal_idx": [0],
+                "video_name": ["vid1"],
+                "start": [1500],
+                "duration": [600],
+                "is_behavior": [1],
+                "exp_prefix": ["exp1"],
+                "time": ["1970-01-01 00:00:00"],
+            }
+        )
+
+        # Act
+        result = BoutTable.bouts_to_bins(data, bin_size_minutes=1, fps=30)
+
+        # Assert
+        # Both bins should have:
+        # - bout_behavior = 0.5 (half the bout counted)
+        # - time_behavior = 300 (half the frames)
+        # - avg_bout_duration = 300 (the actual duration in each bin)
+        # - variance = NaN (only one bout, even if split)
+        assert len(result) == 2
+
+        for i in range(2):
+            assert abs(result.iloc[i]["bout_behavior"] - 0.5) < 0.01
+            assert result.iloc[i]["time_behavior"] == 300
+            # When a bout is split, the avg_bout_duration is the fractional duration
+            assert abs(result.iloc[i]["avg_bout_duration"] - 300) < 0.1
+            assert pd.isna(result.iloc[i]["bout_duration_var"])
+
+    def test_bouts_to_bins_multiple_split_bouts_variance(self):
+        """Test variance calculation with multiple bouts that span bins."""
+        # Arrange: Two bouts with different durations, both split across bins
+        # Bin boundary at 1800 frames
+        # Bout 1: 1600-2000 (400 frames, 200 in each bin)
+        # Bout 2: 1700-2100 (400 frames, 100 in bin 1, 300 in bin 2)
+        data = pd.DataFrame(
+            {
+                "animal_idx": [0, 0],
+                "video_name": ["vid1", "vid1"],
+                "start": [1600, 1700],
+                "duration": [400, 400],
+                "is_behavior": [1, 1],
+                "exp_prefix": ["exp1", "exp1"],
+                "time": ["1970-01-01 00:00:00", "1970-01-01 00:00:00"],
+            }
+        )
+
+        # Act
+        result = BoutTable.bouts_to_bins(data, bin_size_minutes=1, fps=30)
+
+        # Assert
+        # Bin 1: 0.5 + 0.25 = 0.75 bouts (< 1, so variance should be NaN)
+        # Bin 2: 0.5 + 0.75 = 1.25 bouts (> 1, so variance should be calculated)
+        assert len(result) == 2
+
+        # Bin 0 (first bin) has bout_behavior = 0.75 (< 1), so variance is NaN
+        assert abs(result.iloc[0]["bout_behavior"] - 0.75) < 0.01
+        assert pd.isna(result.iloc[0]["bout_duration_var"])
+        assert pd.isna(result.iloc[0]["bout_duration_std"])
+
+        # Bin 1 (second bin) has bout_behavior = 1.25 (> 1), so variance is calculated
+        assert abs(result.iloc[1]["bout_behavior"] - 1.25) < 0.01
+        assert not pd.isna(result.iloc[1]["bout_duration_var"])
+        assert not pd.isna(result.iloc[1]["bout_duration_std"])
+        assert result.iloc[1]["bout_duration_std"] == np.sqrt(
+            result.iloc[1]["bout_duration_var"]
+        )
