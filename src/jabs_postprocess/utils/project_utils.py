@@ -802,7 +802,6 @@ class BoutTable(Table):
             - bout_duration_var: Variance of bout durations for this animal
             - latency_to_first_bout: Frame number of first behavior bout (if any)
         """
-
         # Group by animal and calculate statistics for behavior bouts only
         behavior_bouts = self._data[self._data["is_behavior"] == 1]
 
@@ -1019,6 +1018,18 @@ class BoutTable(Table):
             results["bout_behavior"] = len(
                 bins_to_summarize.loc[bins_to_summarize["is_behavior"] == 1]
             )
+            results["avg_bout_duration"] = bins_to_summarize.loc[
+                bins_to_summarize["is_behavior"] == 1, "duration"
+            ].mean()
+            results["bout_duration_std"] = bins_to_summarize.loc[
+                bins_to_summarize["is_behavior"] == 1, "duration"
+            ].std()
+            results["bout_duration_var"] = bins_to_summarize.loc[
+                bins_to_summarize["is_behavior"] == 1, "duration"
+            ].var()
+            results["latency_to_first_bout"] = bins_to_summarize.loc[
+                bins_to_summarize["is_behavior"] == 1, "start"
+            ].head(1)
             if "distance" in bins_to_summarize.keys():
                 results["not_behavior_dist"] = bins_to_summarize.loc[
                     bins_to_summarize["is_behavior"] == 0, "calc_dist"
@@ -1107,6 +1118,10 @@ class BinTable(Table):
             "time",
             "not_behavior_dist",
             "behavior_dist",
+            "avg_bout_duration",
+            "bout_duration_std",
+            "bout_duration_var",
+            "latency_to_first_bout",
         ]
         self._check_fields()
 
