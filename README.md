@@ -121,7 +121,7 @@ Lots of the functions used in generating these behavior tables were designed for
 
 There are two behavior tables generated. Both contain a header line to store parameters used while calling the script.
 
-Some features are optional, because calculating them can be expensive. These options are noted with an asterisk (\*). While default behavior is to include them, they are not guaranteed.
+Some features are optional, because calculating them can be expensive or are controlled via optional arguments. These options are noted with an asterisk (\*). While default behavior is to include them, they are not guaranteed.
 
 ## Header Data
 
@@ -150,6 +150,11 @@ The bout table contains a compressed RLE encoded format for each bout (post-filt
     * `0` : Not behavior prediction
     * `1` : Behavior prediction
 * `distance`\* : Distance traveled during bout
+* `total_bout_count`\* : Number of behavior bouts per animal
+* `avg_bout_duration`\* : Average bout all duration per animal
+* `bout_duration_std`\* : Standard deviation of all bout durations
+* `bout_duration_var`\* : Variance of all bout durations
+* `latency_to_first_bout`\* : Frame number of first behavior bout
 
 ## Binned Table
 
@@ -168,6 +173,13 @@ Summaries included:
     * If a bout spans multiple time bins, it will be divided into both via the proportion of time
     * Sum of bouts across bins produces the correct total count
     * Note that bouts cannot span between video files
+* `_stats_sample_count` : Sample count used in stats calculation (count of whole and partial bouts in time bin)
+* `avg_bout_duration` : Average bout duration per animal (in time bin)
+* `bout_duration_std` : Standard deviation of bout durations (in time bin)
+* `bout_duration_var` : Variance of bout durations (in time bin)
+* `latency_to_first_prediction` : Frame number of first behavior prediction in the time bin
+    * Frame is relative to the experiment start, not the time bin
+* `latency_to_last_prediction` : Frame number of last behavior prediction in the time bin
 * `not_behavior_dist`\* : Total distance traveled during not behavior bouts
 * `behavior_dist`\* : Total distance traveled during behavior bouts
 

@@ -802,7 +802,6 @@ class BoutTable(Table):
             - bout_duration_var: Variance of bout durations for this animal
             - latency_to_first_bout: Frame number of first behavior bout (if any)
         """
-
         # Group by animal and calculate statistics for behavior bouts only
         behavior_bouts = self._data[self._data["is_behavior"] == 1]
 
@@ -902,7 +901,9 @@ class BoutTable(Table):
                 Binned event data describing the event data.
 
         Notes:
-                Binned data describes event data as summaries. For each state, total time and distance travelled are provided. Additionally, the number of behavior events are counted.
+                Binned data describes event data as summaries.
+                For each state, total time and distance travelled are provided.
+                Additionally, the number of behavior events are counted.
                 Events that span multiple bins are split between them based on the percent in each, allowing fractional bout counts.
         """
         # Get the range that the experiment spans
@@ -1013,12 +1014,57 @@ class BoutTable(Table):
             results["time_not_behavior"] = bins_to_summarize.loc[
                 bins_to_summarize["is_behavior"] == 0, "duration"
             ].sum()
-            results["time_behavior"] = bins_to_summarize.loc[
-                bins_to_summarize["is_behavior"] == 1, "duration"
-            ].sum()
-            results["bout_behavior"] = len(
-                bins_to_summarize.loc[bins_to_summarize["is_behavior"] == 1]
-            )
+
+            # Lots of "behavior" stats are run, so separate them for convenience
+            behavior_bins = bins_to_summarize.loc[bins_to_summarize["is_behavior"] == 1]
+
+            results["time_behavior"] = behavior_bins["duration"].sum()
+            results["bout_behavior"] = behavior_bins["percent_bout"].sum()
+            results["_stats_sample_count"] = len(behavior_bins)
+            # We use a weighted statistic definitions here
+            # Weights are the proportion of bout contained in the bin (percent_bout)
+            if results["bout_behavior"] > 0:
+                results["avg_bout_duration"] = (
+                    np.sum(
+                        behavior_bins["duration"].values
+                        * behavior_bins["percent_bout"].values
+                    )
+                    / results["bout_behavior"]
+                )
+                results["latency_to_first_prediction"] = behavior_bins["start"].min()
+                results["latency_to_last_prediction"] = (
+                    behavior_bins["start"] + behavior_bins["duration"]
+                ).max()
+
+                # Variance requires more than one effective bout
+                if len(behavior_bins) > 1:
+                    denom = (
+                        (len(behavior_bins) - 1)
+                        * results["bout_behavior"]
+                        / len(behavior_bins)
+                    )
+                    results["bout_duration_var"] = (
+                        np.sum(
+                            behavior_bins["percent_bout"].values
+                            * np.square(
+                                behavior_bins["duration"].values
+                                / behavior_bins["percent_bout"].values
+                                - results["avg_bout_duration"]
+                            )
+                        )
+                        / denom
+                    )
+                    results["bout_duration_std"] = np.sqrt(results["bout_duration_var"])
+                else:
+                    results["bout_duration_var"] = np.nan
+                    results["bout_duration_std"] = np.nan
+            else:
+                # No behavior data - set all defaults
+                results["avg_bout_duration"] = np.nan
+                results["bout_duration_var"] = np.nan
+                results["bout_duration_std"] = np.nan
+                results["latency_to_first_prediction"] = np.nan
+                results["latency_to_last_prediction"] = np.nan
             if "distance" in bins_to_summarize.keys():
                 results["not_behavior_dist"] = bins_to_summarize.loc[
                     bins_to_summarize["is_behavior"] == 0, "calc_dist"
@@ -1107,6 +1153,12 @@ class BinTable(Table):
             "time",
             "not_behavior_dist",
             "behavior_dist",
+            "avg_bout_duration",
+            "_stats_sample_count",
+            "bout_duration_std",
+            "bout_duration_var",
+            "latency_to_first_prediction",
+            "latency_to_last_prediction",
         ]
         self._check_fields()
 
