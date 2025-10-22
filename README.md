@@ -173,6 +173,7 @@ Summaries included:
     * If a bout spans multiple time bins, it will be divided into both via the proportion of time
     * Sum of bouts across bins produces the correct total count
     * Note that bouts cannot span between video files
+* `_stats_sample_count` : Sample count used in stats calculation (count of whole and partial bouts in time bin)
 * `avg_bout_duration` : Average bout duration per animal (in time bin)
 * `bout_duration_std` : Standard deviation of bout durations (in time bin)
 * `bout_duration_var` : Variance of bout durations (in time bin)

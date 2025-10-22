@@ -1020,6 +1020,7 @@ class BoutTable(Table):
 
             results["time_behavior"] = behavior_bins["duration"].sum()
             results["bout_behavior"] = behavior_bins["percent_bout"].sum()
+            results["_stats_sample_count"] = len(behavior_bins)
             # We use a weighted statistic definitions here
             # Weights are the proportion of bout contained in the bin (percent_bout)
             if results["bout_behavior"] > 0:
@@ -1153,6 +1154,7 @@ class BinTable(Table):
             "not_behavior_dist",
             "behavior_dist",
             "avg_bout_duration",
+            "_stats_sample_count",
             "bout_duration_std",
             "bout_duration_var",
             "latency_to_first_prediction",
