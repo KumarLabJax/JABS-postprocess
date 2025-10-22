@@ -792,16 +792,19 @@ class TestBoutTableBoutsToBinsWeightedStats:
         result = BoutTable.bouts_to_bins(data, bin_size_minutes=1, fps=30)
 
         # Assert
-        # Bin 1: 0.5 + 0.25 = 0.75 bouts (< 1, so variance should be NaN)
-        # Bin 2: 0.5 + 0.75 = 1.25 bouts (> 1, so variance should be calculated)
+        # Bin 1: 0.5 and 0.25 = 2 bout samples (so variance should be calculated)
+        # Bin 2: 0.5 and 0.75 = 2 bout samples (so variance should be calculated)
         assert len(result) == 2
 
-        # Bin 0 (first bin) has bout_behavior = 0.75 (< 1), so variance is NaN
+        # Bin 0 (first bin) has 2 bout samples, so variance is calculated
         assert abs(result.iloc[0]["bout_behavior"] - 0.75) < 0.01
-        assert pd.isna(result.iloc[0]["bout_duration_var"])
-        assert pd.isna(result.iloc[0]["bout_duration_std"])
+        assert not pd.isna(result.iloc[0]["bout_duration_var"])
+        assert not pd.isna(result.iloc[0]["bout_duration_std"])
+        assert result.iloc[1]["bout_duration_std"] == np.sqrt(
+            result.iloc[1]["bout_duration_var"]
+        )
 
-        # Bin 1 (second bin) has bout_behavior = 1.25 (> 1), so variance is calculated
+        # Bin 1 (second bin) has 2 bout samples, so variance is calculated
         assert abs(result.iloc[1]["bout_behavior"] - 1.25) < 0.01
         assert not pd.isna(result.iloc[1]["bout_duration_var"])
         assert not pd.isna(result.iloc[1]["bout_duration_std"])

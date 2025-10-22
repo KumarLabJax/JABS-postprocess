@@ -1036,7 +1036,7 @@ class BoutTable(Table):
                 ).max()
 
                 # Variance requires more than one effective bout
-                if results["bout_behavior"] > 1:
+                if len(behavior_bins) > 1:
                     denom = (
                         (len(behavior_bins) - 1)
                         * results["bout_behavior"]
