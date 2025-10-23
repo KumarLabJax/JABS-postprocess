@@ -759,15 +759,15 @@ class TestBoutTableBoutsToBinsWeightedStats:
         # Both bins should have:
         # - bout_behavior = 0.5 (half the bout counted)
         # - time_behavior = 300 (half the frames)
-        # - avg_bout_duration = 300 (the actual duration in each bin)
+        # - avg_bout_duration = 600 (duration remains same, average of 1 sample)
         # - variance = NaN (only one bout, even if split)
         assert len(result) == 2
 
         for i in range(2):
             assert abs(result.iloc[i]["bout_behavior"] - 0.5) < 0.01
             assert result.iloc[i]["time_behavior"] == 300
-            # When a bout is split, the avg_bout_duration is the fractional duration
-            assert abs(result.iloc[i]["avg_bout_duration"] - 300) < 0.1
+            # When a bout is split, the avg_bout_duration is still the total duration
+            assert abs(result.iloc[i]["avg_bout_duration"] - 600) < 0.1
             assert pd.isna(result.iloc[i]["bout_duration_var"])
 
     def test_bouts_to_bins_multiple_split_bouts_variance(self):

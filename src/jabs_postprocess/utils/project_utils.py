@@ -1024,12 +1024,10 @@ class BoutTable(Table):
             # We use a weighted statistic definitions here
             # Weights are the proportion of bout contained in the bin (percent_bout)
             if results["bout_behavior"] > 0:
-                results["avg_bout_duration"] = (
-                    np.sum(
-                        behavior_bins["duration"].values
-                        * behavior_bins["percent_bout"].values
-                    )
-                    / results["bout_behavior"]
+                results["avg_bout_duration"] = np.average(
+                    behavior_bins["duration"].values
+                    / behavior_bins["percent_bout"].values,
+                    weights=behavior_bins["percent_bout"].values,
                 )
                 results["latency_to_first_prediction"] = behavior_bins["start"].min()
                 results["latency_to_last_prediction"] = (
