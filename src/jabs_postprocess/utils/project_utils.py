@@ -770,6 +770,16 @@ class BoutTable(Table):
                 "features/per_frame/centroid_velocity_mag centroid_velocity_mag",
                 lambda x: np.nansum(x, initial=0) / 30,
             ),
+            FeatureInEvent(
+                "distance_threshold",
+                "features/per_frame/centroid_velocity_mag centroid_velocity_mag",
+                lambda x: np.nansum(x[x > 5], initial=0) / 30,
+            ),
+            FeatureInEvent(
+                "distance_seg",
+                "features/per_frame/shape_descriptor centroid_speed",
+                lambda x: np.nansum(x, initial=0) / 30,
+            ),
             FeatureInEvent("closest_id", "closest_identities", np.median),
             FeatureInEvent("closest_lixit", "closest_lixit", np.median),
             FeatureInEvent("closest_corner", "closest_corners", np.median),
