@@ -62,5 +62,5 @@ From: ghcr.io/astral-sh/uv:python3.10-bookworm-slim
 
 %labels
 	Author "The Kumar Lab"
-	Version "0.1.0"
+	Version "0.5.1"
 	Description "JABS post-processing container with Python 3.10"
