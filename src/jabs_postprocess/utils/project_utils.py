@@ -509,6 +509,8 @@ class Table:
             "exp_prefix",
             "time",
             "distance",
+            "distance_threshold",
+            "distance_seg",
             "closest_id",
             "closest_lixit",
             "closest_corner",
@@ -677,6 +679,8 @@ class BoutTable(Table):
             "exp_prefix",
             "time",
             "distance",
+            "distance_threshold",
+            "distance_seg",
             "closest_id",
             "closest_lixit",
             "closest_corner",
@@ -768,6 +772,16 @@ class BoutTable(Table):
             FeatureInEvent(
                 "distance",
                 "features/per_frame/centroid_velocity_mag centroid_velocity_mag",
+                lambda x: np.nansum(x, initial=0) / 30,
+            ),
+            FeatureInEvent(
+                "distance_threshold",
+                "features/per_frame/centroid_velocity_mag centroid_velocity_mag",
+                lambda x: np.nansum(x[x > 5], initial=0) / 30,
+            ),
+            FeatureInEvent(
+                "distance_seg",
+                "features/per_frame/shape_descriptor centroid_speed",
                 lambda x: np.nansum(x, initial=0) / 30,
             ),
             FeatureInEvent("closest_id", "closest_identities", np.median),
@@ -1003,6 +1017,14 @@ class BoutTable(Table):
                 bins_to_summarize["calc_dist"] = (
                     bins_to_summarize["distance"] * bins_to_summarize["percent_bout"]
                 )
+                bins_to_summarize["calc_dist_threshold"] = (
+                    bins_to_summarize["distance_threshold"]
+                    * bins_to_summarize["percent_bout"]
+                )
+                bins_to_summarize["calc_dist_seg"] = (
+                    bins_to_summarize["distance_seg"]
+                    * bins_to_summarize["percent_bout"]
+                )
             else:
                 pass
             pd.options.mode.chained_assignment = "warn"
@@ -1069,6 +1091,12 @@ class BoutTable(Table):
                 ].sum()
                 results["behavior_dist"] = bins_to_summarize.loc[
                     bins_to_summarize["is_behavior"] == 1, "calc_dist"
+                ].sum()
+                results["behavior_dist_threshold"] = bins_to_summarize.loc[
+                    bins_to_summarize["is_behavior"] == 1, "calc_dist_threshold"
+                ].sum()
+                results["behavior_dist_seg"] = bins_to_summarize.loc[
+                    bins_to_summarize["is_behavior"] == 1, "calc_dist_seg"
                 ].sum()
             results_df_list.append(pd.DataFrame(results))
 
@@ -1151,6 +1179,8 @@ class BinTable(Table):
             "time",
             "not_behavior_dist",
             "behavior_dist",
+            "behavior_dist_threshold",
+            "behavior_dist_seg",
             "avg_bout_duration",
             "_stats_sample_count",
             "bout_duration_std",

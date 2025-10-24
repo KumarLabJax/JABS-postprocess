@@ -1,0 +1,26 @@
+# Locomotion in periphery
+# Within 20% distance of any wall
+# Mouse is moving > 5cm/s
+# This is really slow for a mouse, but essentially just removes noise from micromovements
+behavior: 
+  Locomotion In Periphery
+
+interpolate:
+  5
+
+stitch:
+  5
+
+min_bout:
+  15
+
+definition:
+  and:
+    - less than:
+      - features/per_frame/corner_distances distance to wall
+      - divide:
+        - avg_wall_length
+        - 5
+    - greater than:
+      - features/per_frame/centroid_velocity_mag centroid_velocity_mag
+      - 5.0
