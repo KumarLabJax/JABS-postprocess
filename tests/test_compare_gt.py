@@ -27,14 +27,15 @@ The tests use extensive mocking to isolate functionality and parametrization to
 test multiple scenarios efficiently. Fixtures are provided for common test data
 like mock bout tables, JABS projects, and annotation samples.
 """
-
+# %%
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
+import plotnine as p9
 import pytest
 
-from jabs_postprocess.compare_gt import evaluate_ground_truth, generate_iou_scan
+from jabs_postprocess.compare_gt import evaluate_ground_truth, generate_iou_scan, generate_framewise_performance_plot
 from jabs_postprocess.utils.project_utils import (
     Bouts,
 )
@@ -672,3 +673,67 @@ def test_generate_iou_scan_metrics_calculation(mock_metrics, expected_result):
                     assert np.isnan(row[metric])
                 else:
                     assert round(row[metric], 3) == round(expected, 3)
+
+@pytest.fixture
+def sample_data():
+    """Create small sample GT and prediction DataFrames for testing."""
+    gt_df = pd.DataFrame({
+        'video_name': ['video1', 'video1', 'video2'],
+        'animal_idx': [0, 1, 0],
+        'start': [0, 5, 0],
+        'duration': [5, 5, 10],
+        'is_behavior': [1, 0, 1]
+    })
+    
+    pred_df = pd.DataFrame({
+        'video_name': ['video1', 'video1', 'video2'],
+        'animal_idx': [0, 1, 0],
+        'start': [0, 5, 0],
+        'duration': [5, 5, 10],
+        'is_behavior': [1, 0, 0]
+    })
+    
+    return gt_df, pred_df
+
+
+def test_generate_plot_runs(sample_data):
+    """Test that the plot function runs and returns a ggplot object."""
+    gt_df, pred_df = sample_data
+    plot = generate_framewise_performance_plot(gt_df, pred_df)
+    # Check that the returned object is a ggplot
+    assert isinstance(plot, p9.ggplot)
+
+def test_plot_metrics(sample_data):
+    """Test that generate_framewise_performance_plot correctly handles NaNs."""
+    gt_df, pred_df = sample_data
+    
+    plot = generate_framewise_performance_plot(gt_df, pred_df)
+    df = plot.data.sort_values(['video_name','metric']).reset_index(drop=True)
+    
+    # Manually compute expected metrics
+    expected = []
+    # Video 1: Perfect prediction
+    expected.append({'video_name': 'video1', 
+                     'precision': 1.0, 'recall': 1.0,
+                     'f1_score': 1.0, 'accuracy': 1.0})
+    # Video 2: All wrong
+    expected.append({'video_name':'video2', 
+                     'precision': float('nan'), 'recall': 0.0,
+                     'f1_score': float('nan'), 'accuracy':0.0})
+    
+    expected_df = pd.DataFrame(expected)
+    expected_melted = pd.melt(
+        expected_df,
+        id_vars=['video_name'],
+        value_vars=['precision','recall','f1_score','accuracy'],
+        var_name='metric',
+        value_name='value'
+    ).sort_values(['video_name','metric']).reset_index(drop=True)
+    
+    # Compare numeric values, treating NaNs as equal
+    for a, b in zip(df['value'], expected_melted['value']):
+        if pd.isna(a) and pd.isna(b):
+            continue
+        else:
+            assert abs(a - b) < 1e-6
+# %%

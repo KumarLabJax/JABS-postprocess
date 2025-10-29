@@ -42,9 +42,12 @@ def evaluate_ground_truth(
         filter_scan: List of filter (minimum duration in frames to consider real) values to test
         iou_thresholds: List of intersection over union thresholds to scan
         filter_ground_truth: Apply filters to ground truth data (default is only to filter predictions)
+        trim_time: Limit the duration in frames of videos for performance    
+    Returns:
+        None, but saves the following files to results_folder:
+        framewise_output: Output file to save the frame-level performance plot
         scan_output: Output file to save the filter scan performance plot
         bout_output: Output file to save the resulting bout performance plot
-        trim_time: Limit the duration in frames of videos for performance
         ethogram_output: Output file to save the ethogram plot comparing GT and predictions
         scan_csv_output: Output file to save the scan performance data as CSV
     """
@@ -124,7 +127,7 @@ def evaluate_ground_truth(
     all_annotations = pd.concat([gt_df, pred_df])
 
     # Generate frame-level performance plot
-    framewise_plot = generate_framewise_performace_plot(gt_df, pred_df)
+    framewise_plot = generate_framewise_performance_plot(gt_df, pred_df)
     if ouput_paths["framewise_plot"] is not None:
         framewise_plot.save(
             ouput_paths["framewise_plot"], height=6, width=12, dpi=300
@@ -538,7 +541,7 @@ def _compute_framewise_confusion(gt_df, pred_df):
             'TN': ((x['is_behavior_gt'] == 0) & (x['is_behavior_pred'] == 0)).sum(),
             'FP': ((x['is_behavior_gt'] == 0) & (x['is_behavior_pred'] == 1)).sum(),
             'FN': ((x['is_behavior_gt'] == 1) & (x['is_behavior_pred'] == 0)).sum(),
-        }))
+        }), include_groups=False)
         .reset_index()
     )
 
@@ -564,7 +567,7 @@ def _find_outliers(melted_df: pd.DataFrame):
     
     return outliers
 
-def generate_framewise_performace_plot(
+def generate_framewise_performance_plot(
         gt_df: pd.DataFrame, pred_df:pd.DataFrame):
     """
     Generate and save a frame-level performance plot comparing ground truth and predicted behavior intervals.
