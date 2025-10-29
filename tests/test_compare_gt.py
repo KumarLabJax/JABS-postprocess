@@ -27,7 +27,7 @@ The tests use extensive mocking to isolate functionality and parametrization to
 test multiple scenarios efficiently. Fixtures are provided for common test data
 like mock bout tables, JABS projects, and annotation samples.
 """
-# %%
+
 from unittest.mock import MagicMock, patch
 
 import numpy as np

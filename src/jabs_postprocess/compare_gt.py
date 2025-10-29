@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 import plotnine as p9
 
-
 from jabs_postprocess.utils.project_utils import (
     Bouts,
     BoutTable,
@@ -19,7 +18,7 @@ from jabs_postprocess.utils.project_utils import (
 
 logger = logging.getLogger(__name__)
 
-# %%
+
 def evaluate_ground_truth(
     behavior: str,
     ground_truth_folder: Path,
