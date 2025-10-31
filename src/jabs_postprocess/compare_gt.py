@@ -50,7 +50,7 @@ def evaluate_ground_truth(
         ethogram_output: Output file to save the ethogram plot comparing GT and predictions
         scan_csv_output: Output file to save the scan performance data as CSV
     """
-    ouput_paths = generate_output_paths(results_folder)
+    output_paths = generate_output_paths(results_folder)
 
     # Set default values if not provided
     stitch_scan = stitch_scan or np.arange(5, 46, 5).tolist()
@@ -127,10 +127,10 @@ def evaluate_ground_truth(
 
     # Generate frame-level performance plot
     framewise_plot = generate_framewise_performance_plot(gt_df, pred_df)
-    if ouput_paths["framewise_plot"] is not None:
-        framewise_plot.save(ouput_paths["framewise_plot"], height=6, width=12, dpi=300)
+    if output_paths["framewise_plot"] is not None:
+        framewise_plot.save(output_paths["framewise_plot"], height=6, width=12, dpi=300)
         logging.info(
-            f"Frame-level performance plot saved to {ouput_paths['framewise_plot']}"
+            f"Frame-level performance plot saved to {output_paths['framewise_plot']}"
         )
 
     # We only want the positive examples for performance evaluation
@@ -161,9 +161,9 @@ def evaluate_ground_truth(
             "No performance data to analyze. Ensure that the ground truth and predictions are correctly formatted and contain valid bouts."
         )
 
-    if ouput_paths["scan_csv"] is not None:
-        performance_df.to_csv(ouput_paths["scan_csv"], index=False)
-        logging.info(f"Scan performance data saved to {ouput_paths['scan_csv']}")
+    if output_paths["scan_csv"] is not None:
+        performance_df.to_csv(output_paths["scan_csv"], index=False)
+        logging.info(f"Scan performance data saved to {output_paths['scan_csv']}")
 
     _melted_df = pd.melt(performance_df, id_vars=["threshold", "stitch", "filter"])
 
@@ -183,8 +183,8 @@ def evaluate_ground_truth(
             + p9.theme_bw()
             + p9.labs(title=f"No performance data for {middle_threshold} IoU")
         )
-        if ouput_paths["scan_plot"]:
-            plot.save(ouput_paths["scan_plot"], height=6, width=12, dpi=300)
+        if output_paths["scan_plot"]:
+            plot.save(output_paths["scan_plot"], height=6, width=12, dpi=300)
         # Create default winning filters with first values from scan parameters
         winning_filters = pd.DataFrame(
             {
@@ -242,8 +242,8 @@ def evaluate_ground_truth(
             + p9.scale_fill_continuous(na_value=0)
         )
 
-        if ouput_paths["scan_plot"]:
-            plot.save(ouput_paths["scan_plot"], height=6, width=12, dpi=300)
+        if output_paths["scan_plot"]:
+            plot.save(output_paths["scan_plot"], height=6, width=12, dpi=300)
 
         # Handle case where all f1_plot values are NaN or empty
         if subset_df["f1_plot"].isna().all() or len(subset_df) == 0:
@@ -265,9 +265,9 @@ def evaluate_ground_truth(
             ).T.reset_index(drop=True)[["stitch", "filter"]]
 
     winning_bout_df = pd.merge(performance_df, winning_filters, on=["stitch", "filter"])
-    if ouput_paths["bout_csv"] is not None:
-        winning_bout_df.to_csv(ouput_paths["bout_csv"], index=False)
-        logging.info(f"Bout performance data saved to {ouput_paths['bout_csv']}")
+    if output_paths["bout_csv"] is not None:
+        winning_bout_df.to_csv(output_paths["bout_csv"], index=False)
+        logging.info(f"Bout performance data saved to {output_paths['bout_csv']}")
 
     melted_winning = pd.melt(winning_bout_df, id_vars=["threshold", "stitch", "filter"])
 
@@ -279,9 +279,9 @@ def evaluate_ground_truth(
         + p9.geom_line()
         + p9.theme_bw()
         + p9.scale_y_continuous(limits=(0, 1))
-    ).save(ouput_paths["bout_plot"], height=6, width=12, dpi=300)
+    ).save(output_paths["bout_plot"], height=6, width=12, dpi=300)
 
-    if ouput_paths["ethogram"] is not None:
+    if output_paths["ethogram"] is not None:
         # Prepare data for ethogram plot
         # Use all_annotations to include both behavior (1) and not-behavior (0) states
         plot_df = all_annotations.copy()
@@ -338,14 +338,14 @@ def evaluate_ground_truth(
                     )
                     # Adjust height based on the number of unique animal-video combinations
                     ethogram_plot.save(
-                        ouput_paths["ethogram"],
+                        output_paths["ethogram"],
                         height=1.5 * num_unique_combos + 2,
                         width=12,
                         dpi=300,
                         limitsize=False,
                         verbose=False,
                     )
-                    logging.info(f"Ethogram plot saved to {ouput_paths['ethogram']}")
+                    logging.info(f"Ethogram plot saved to {output_paths['ethogram']}")
                 else:
                     logger.warning(
                         f"No behavior instances found for behavior {behavior} after filtering for ethogram."
