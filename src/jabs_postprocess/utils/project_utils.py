@@ -923,11 +923,17 @@ class BoutTable(Table):
         # Get the range that the experiment spans
         try:
             # TODO: Add support for different sized experiment blocks (re-use block below to make an end time that is adjusted per-video)
+            min_time = min(event_df["time"])
+            max_time = max(event_df["time"])
+            if min_time == max_time:
+                raise ValueError(
+                    "All timestamps are identical, using frame-based calculation"
+                )
             start_time = BoutTable.round_hour(
-                datetime.strptime(min(event_df["time"]), "%Y-%m-%d %H:%M:%S")
+                datetime.strptime(min_time, "%Y-%m-%d %H:%M:%S")
             )
             end_time = BoutTable.round_hour(
-                datetime.strptime(max(event_df["time"]), "%Y-%m-%d %H:%M:%S"), up=True
+                datetime.strptime(max_time, "%Y-%m-%d %H:%M:%S"), up=True
             )
         # Timestamp doesn't exist. Make up some. This assumes only 1 video exists and just makes up timestamps based on the available bout data.
         except (KeyError, ValueError, TypeError):
