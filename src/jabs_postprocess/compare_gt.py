@@ -494,6 +494,15 @@ def generate_output_paths(results_folder: Path):
         "framewise_plot": results_folder / "framewise_performance.png",
     }
 
+def _expand_intervals_to_frames(df):
+        """Expand behavior intervals into per-frame rows."""
+        expanded = df.copy()
+        expanded["frame"] = expanded.apply(
+            lambda row: range(row["start"], row["start"] + row["duration"]), axis=1
+        )
+        expanded = expanded.explode("frame")
+        expanded = expanded.sort_values(by=["animal_idx", "frame"])
+        return expanded
 
 def _compute_framewise_confusion(gt_df, pred_df):
     """Compute frame-level confusion counts (TP, TN, FP, FN) per video.
@@ -508,19 +517,9 @@ def _compute_framewise_confusion(gt_df, pred_df):
             ['video_name', 'TP', 'TN', 'FP', 'FN'].
     """
 
-    def expand_intervals_to_frames(df):
-        """Expand behavior intervals into per-frame rows."""
-        expanded = df.copy()
-        expanded["frame"] = expanded.apply(
-            lambda row: range(row["start"], row["start"] + row["duration"]), axis=1
-        )
-        expanded = expanded.explode("frame")
-        expanded = expanded.sort_values(by=["animal_idx", "frame"])
-        return expanded
-
     # Expand ground truth and predictions into frame-level data
-    gt_frames = expand_intervals_to_frames(gt_df)
-    pred_frames = expand_intervals_to_frames(pred_df)
+    gt_frames = _expand_intervals_to_frames(gt_df)
+    pred_frames = _expand_intervals_to_frames(pred_df)
 
     # Merge to align predictions and ground truth per frame
     framewise = pd.merge(
@@ -560,7 +559,16 @@ def _compute_framewise_confusion(gt_df, pred_df):
 
 
 def _find_outliers(melted_df: pd.DataFrame):
-    # Identify outliers per metric using IQR rule
+    """
+    Return rows flagged as outliers per metric using the IQR rule.
+
+    Args:
+        melted_df: long-form DataFrame with at least 'metric' and 'value' columns.
+
+    Returns:
+        DataFrame containing the outliers rows from the input DataFrame.
+        Returns an empty DataFrame with the same columns if no outliers found.
+    """
     outliers = []
     for metric in melted_df["metric"].unique():
         values = melted_df.loc[melted_df["metric"] == metric, "value"]
