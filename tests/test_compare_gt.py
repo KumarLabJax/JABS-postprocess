@@ -762,5 +762,3 @@ def test_plot_metrics(sample_data):
             continue
         else:
             assert abs(a - b) < 1e-6
-
-
