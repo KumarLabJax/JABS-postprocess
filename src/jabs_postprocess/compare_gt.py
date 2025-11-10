@@ -494,15 +494,17 @@ def generate_output_paths(results_folder: Path):
         "framewise_plot": results_folder / "framewise_performance.png",
     }
 
+
 def _expand_intervals_to_frames(df):
-        """Expand behavior intervals into per-frame rows."""
-        expanded = df.copy()
-        expanded["frame"] = expanded.apply(
-            lambda row: range(row["start"], row["start"] + row["duration"]), axis=1
-        )
-        expanded = expanded.explode("frame")
-        expanded = expanded.sort_values(by=["animal_idx", "frame"])
-        return expanded
+    """Expand behavior intervals into per-frame rows."""
+    expanded = df.copy()
+    expanded["frame"] = expanded.apply(
+        lambda row: range(row["start"], row["start"] + row["duration"]), axis=1
+    )
+    expanded = expanded.explode("frame")
+    expanded = expanded.sort_values(by=["animal_idx", "frame"])
+    return expanded
+
 
 def _compute_framewise_confusion(gt_df, pred_df):
     """Compute frame-level confusion counts (TP, TN, FP, FN) per video.
