@@ -26,17 +26,17 @@ class ClassifierSettings:
     def __init__(
         self,
         behavior: str,
-        interpolate: int = DEFAULT_INTERPOLATE,
-        stitch: int = DEFAULT_STITCH,
-        min_bout: int = DEFAULT_MIN_BOUT,
+        interpolate: int | None = None,
+        stitch: int | None = None,
+        min_bout: int | None = None,
     ):
         """Initializes a settings object.
 
         Args:
                 behavior: string containing the name of the behavior
-                interpolate: number of frames where predictions will be interpolated when data is missing
-                stitch: number of frames between "behavior" predictions that will be merged
-                min_bout: minimum number of frames for "behavior" predictions to remain
+                interpolate: number of frames where predictions will be interpolated when data is missing (None uses default)
+                stitch: number of frames between "behavior" predictions that will be merged (None uses default)
+                min_bout: minimum number of frames for "behavior" predictions to remain (None uses default)
 
         Todo:
                 Add back in the functionality to change thresholds (useful for searching for data which has poor/odd probabilities).
@@ -45,9 +45,9 @@ class ClassifierSettings:
                         threshold_max: high threshold for calling behavior (default 1.0)
         """
         self._behavior = behavior
-        self._interpolate = interpolate
-        self._stitch = stitch
-        self._min_bout = min_bout
+        self._interpolate = interpolate if interpolate is not None else DEFAULT_INTERPOLATE
+        self._stitch = stitch if stitch is not None else DEFAULT_STITCH
+        self._min_bout = min_bout if min_bout is not None else DEFAULT_MIN_BOUT
 
     @property
     def behavior(self):
