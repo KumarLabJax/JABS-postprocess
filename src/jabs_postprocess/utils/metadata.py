@@ -45,7 +45,9 @@ class ClassifierSettings:
                         threshold_max: high threshold for calling behavior (default 1.0)
         """
         self._behavior = behavior
-        self._interpolate = interpolate if interpolate is not None else DEFAULT_INTERPOLATE
+        self._interpolate = (
+            interpolate if interpolate is not None else DEFAULT_INTERPOLATE
+        )
         self._stitch = stitch if stitch is not None else DEFAULT_STITCH
         self._min_bout = min_bout if min_bout is not None else DEFAULT_MIN_BOUT
 
