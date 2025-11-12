@@ -231,7 +231,7 @@ class TestAddBoutStatistics:
 
         # Assert - Typer will error before reaching our code due to missing required option
         assert result.exit_code != 0
-        assert "Missing option" in result.stdout
+        assert "Missing option" in result.stderr
 
     @patch("jabs_postprocess.cli.main.BoutTable")
     def test_add_bout_statistics_output_messages(

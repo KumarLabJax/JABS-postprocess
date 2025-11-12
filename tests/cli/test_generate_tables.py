@@ -344,7 +344,7 @@ class TestGenerateTables:
 
         # Assert
         assert result.exit_code != 0
-        assert "Missing option" in result.stdout
+        assert "Missing option" in result.stderr
 
     @patch("jabs_postprocess.cli.main.generate_behavior_tables")
     def test_generate_tables_no_behaviors(
@@ -371,5 +371,5 @@ class TestGenerateTables:
         assert result.exit_code == 1
         assert (
             "Must provide either --behavior-config or --behavior options"
-            in result.stdout
+            in result.stderr
         )
