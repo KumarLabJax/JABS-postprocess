@@ -770,3 +770,50 @@ def test_merge_multiple_behavior_tables_empty_group():
 
     with pytest.raises(ValueError, match="No tables provided for behavior: grooming"):
         merge_multiple_behavior_tables(table_groups)
+
+
+# Integration tests without mocks
+
+
+def test_classifier_settings_with_none_values_integration():
+    """Integration test: ClassifierSettings handles None values correctly.
+
+    This is an integration test for issue #45 that verifies the fix works
+    in the actual codebase without mocking. It tests that None values passed
+    to ClassifierSettings are correctly converted to defaults and can be
+    used in comparison operations without raising TypeError.
+
+    This test complements the unit tests in test_metadata.py by verifying
+    the fix works in the context where it was actually failing.
+    """
+    from jabs_postprocess.utils.metadata import (
+        ClassifierSettings,
+        DEFAULT_INTERPOLATE,
+        DEFAULT_STITCH,
+        DEFAULT_MIN_BOUT,
+    )
+    from jabs_postprocess.utils.project_utils import Bouts
+
+    # Create settings with None values (simulates the bug scenario)
+    settings = ClassifierSettings(
+        behavior="grooming",
+        interpolate=None,
+        stitch=None,
+        min_bout=None,
+    )
+
+    # Verify defaults are applied
+    assert settings.interpolate == DEFAULT_INTERPOLATE
+    assert settings.stitch == DEFAULT_STITCH
+    assert settings.min_bout == DEFAULT_MIN_BOUT
+
+    # Create some bout data to test filter_by_settings
+    # This simulates the actual code path where the bug occurred
+    bouts = Bouts.from_value_vector([0, 0, 1, 1, 1, 0, 0, -1, -1, 0, 1, 1])
+
+    # This should not raise TypeError
+    # Previously would fail with: TypeError: '>' not supported between instances of 'NoneType' and 'int'
+    try:
+        bouts.filter_by_settings(settings)
+    except TypeError as e:
+        pytest.fail(f"filter_by_settings raised TypeError with None values: {e}")
