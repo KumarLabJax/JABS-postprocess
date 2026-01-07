@@ -501,7 +501,9 @@ def _expand_intervals_to_frames(df):
     # Ensure integer frame boundaries so range() receives ints even if upstream data was cast to float
     for col in ["animal_idx", "start", "duration"]:
         if col in expanded.columns:
-            expanded[col] = pd.to_numeric(expanded[col], errors="coerce").fillna(0).astype(int)
+            expanded[col] = (
+                pd.to_numeric(expanded[col], errors="coerce").fillna(0).astype(int)
+            )
     expanded["frame"] = expanded.apply(
         lambda row: range(row["start"], row["start"] + row["duration"]), axis=1
     )
