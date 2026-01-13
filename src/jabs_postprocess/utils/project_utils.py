@@ -28,6 +28,28 @@ from jabs_postprocess.utils.metadata import (
 BEHAVIOR_CLASSIFY_VERSION = 1
 
 
+def normalize_behavior_name(behavior: str) -> str:
+    """Normalize behavior names to align with pipeline behavior path rules."""
+    normalized = behavior.replace(" ", "_")
+    normalized = re.sub(r"[()]", "", normalized)
+    return normalized.lower()
+
+
+def resolve_behavior_key(behavior: str, available_behaviors: List[str]) -> str | None:
+    """Resolves a behavior key from available behaviors using normalization."""
+    if behavior in available_behaviors:
+        return behavior
+    behavior_norm = normalize_behavior_name(behavior)
+    matches = [
+        key
+        for key in available_behaviors
+        if normalize_behavior_name(key) == behavior_norm
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
 class MissingBehaviorException(ValueError):
     """Custom error for behavior-related missing data."""
 
@@ -705,10 +727,11 @@ class BoutTable(Table):
             data = json.load(f)
 
         vid_name = data["file"]
+        behavior_norm = normalize_behavior_name(behavior)
         df_list = []
         for animal_idx, labels in data["labels"].items():
             for cur_behavior, label_data in labels.items():
-                if cur_behavior == behavior:
+                if normalize_behavior_name(cur_behavior) == behavior_norm:
                     new_events = []
                     for cur_event in label_data:
                         new_df = pd.DataFrame(
@@ -1340,8 +1363,9 @@ class Prediction(BoutTable):
                 MissingBehaviorException if behavior file exists but contains no behavior predictions.
         """
         with h5py.File(str(source_file), "r") as in_f:
-            if settings.behavior not in in_f["predictions/"].keys():
-                available_keys = list(in_f["predictions"].keys())
+            available_keys = list(in_f["predictions"].keys())
+            behavior_key = resolve_behavior_key(settings.behavior, available_keys)
+            if behavior_key is None:
                 if len(available_keys) > 0:
                     behavior_pred_shape = in_f[
                         f"predictions/{available_keys[0]}/predicted_class"
@@ -1353,7 +1377,7 @@ class Prediction(BoutTable):
                     raise MissingBehaviorException(
                         "Prediction file exists, but no behaviors present to discover shape."
                     )
-            class_calls = in_f[f"predictions/{settings.behavior}/predicted_class"][:]
+            class_calls = in_f[f"predictions/{behavior_key}/predicted_class"][:]
 
         # Iterate over the animals
         bout_dfs = []
