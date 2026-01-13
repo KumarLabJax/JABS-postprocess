@@ -498,6 +498,19 @@ def generate_output_paths(results_folder: Path):
 def _expand_intervals_to_frames(df):
     """Expand behavior intervals into per-frame rows."""
     expanded = df.copy()
+    # Ensure integer frame boundaries so range() receives ints even if upstream data was cast to float
+    # (e.g., when concatenating empty int DataFrames with dict-based DataFrames, pandas upcasts to float)
+    for col in ["animal_idx", "start", "duration"]:
+        if col in expanded.columns:
+            # Check for NaN values which indicate data quality issues
+            if expanded[col].isna().any():
+                raise ValueError(
+                    f"Column '{col}' contains NaN values. "
+                    f"Expected valid numeric values for frame interval calculation."
+                )
+            # Convert to int, allowing for float values that can be safely cast
+            # (e.g., 5.0 -> 5, but 5.5 would truncate to 5)
+            expanded[col] = expanded[col].astype(int)
     expanded["frame"] = expanded.apply(
         lambda row: range(row["start"], row["start"] + row["duration"]), axis=1
     )
