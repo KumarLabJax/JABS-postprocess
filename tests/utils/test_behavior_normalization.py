@@ -37,19 +37,13 @@ def test_from_jabs_annotation_file_uses_normalized_behavior(tmp_path: Path):
     annotation = {
         "file": "video1.avi",
         "labels": {
-            "0": {
-                "rearing (unsupported)": [
-                    {"start": 0, "end": 2, "present": 1}
-                ]
-            }
+            "0": {"rearing (unsupported)": [{"start": 0, "end": 2, "present": 1}]}
         },
     }
     annotation_path = tmp_path / "annotation.json"
     annotation_path.write_text(json.dumps(annotation))
 
-    table = BoutTable.from_jabs_annotation_file(
-        annotation_path, "Rearing_unsupported"
-    )
+    table = BoutTable.from_jabs_annotation_file(annotation_path, "Rearing_unsupported")
     df = table.data
 
     assert len(df) == 1
@@ -72,7 +66,5 @@ def test_generate_bout_table_uses_normalized_behavior(tmp_path: Path):
     settings = ClassifierSettings("Rearing_unsupported", 0, 0, 0)
     df = Prediction.generate_bout_table(pred_path, settings)
 
-    match = df[
-        (df["start"] == 1) & (df["duration"] == 2) & (df["is_behavior"] == 1)
-    ]
+    match = df[(df["start"] == 1) & (df["duration"] == 2) & (df["is_behavior"] == 1)]
     assert len(match) == 1
