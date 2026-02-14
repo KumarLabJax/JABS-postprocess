@@ -1,0 +1,95 @@
+# ================================================================================
+# BASIC LOCOMOTION DETECTION CONFIGURATION
+# ================================================================================
+# This configuration demonstrates the simplest form of heuristic behavior 
+# classification in JABS-postprocess: detecting when a mouse is actively moving.
+# 
+# Purpose: Classify frames where the mouse is engaged in active locomotion
+# Use Case: Basic movement analysis, distinguishing motion from stationary periods
+# Difficulty: Beginner
+# ================================================================================
+
+# BEHAVIOR DEFINITION
+# -------------------
+# The name that will appear in output files and behavior tables
+# This should be descriptive and match your experimental naming conventions
+behavior: 
+  Basic Locomotion
+
+# POST-PROCESSING PARAMETERS
+# ---------------------------
+# These parameters clean up the raw classification results to produce more
+# biologically meaningful behavior bouts
+
+# interpolate: Maximum number of frames to fill in missing/ambiguous classifications
+# - Used to handle brief tracking errors or ambiguous frames
+# - Value of 5 means gaps of 5 frames or less will be filled based on surrounding context
+# - At 30 fps: 5 frames = ~167ms of interpolation
+interpolate:
+  5
+
+# stitch: Maximum gap between behavior bouts that should be combined
+# - Joins nearby bouts of the same behavior separated by brief interruptions
+# - Value of 5 means locomotion bouts separated by ≤5 frames will be merged
+# - Helps create more continuous behavioral episodes
+stitch:
+  5
+
+# min_bout: Minimum number of frames required for a valid behavior bout
+# - Filters out very brief, likely spurious classifications
+# - Value of 15 means locomotion must persist for at least 15 frames to count
+# - At 30 fps: 15 frames = 0.5 seconds minimum locomotion episode
+min_bout:
+  15
+
+# BEHAVIOR CLASSIFICATION RULE
+# ----------------------------
+# This section defines the logical condition that must be met for a frame
+# to be classified as the target behavior
+
+definition:
+  # Use "greater than" comparison to detect movement above a threshold
+  greater than:
+    # First operand: The feature to evaluate
+    # This path references the centroid velocity magnitude from the feature file
+    # - "features/per_frame/centroid_velocity_mag" is the HDF5 dataset path
+    # - "centroid_velocity_mag" is a human-readable description for logs/output
+    - features/per_frame/centroid_velocity_mag centroid_velocity_mag
+    
+    # Second operand: The threshold value
+    # Mouse centroid must be moving faster than 2.0 cm/second to be classified as locomotion
+    # This threshold is deliberately conservative to avoid noise from micro-movements
+    # Typical mouse walking speeds range from 2-20 cm/s, running can exceed 30 cm/s
+    - 2.0
+
+# TECHNICAL NOTES
+# ---------------
+# • centroid_velocity_mag represents the instantaneous speed of the mouse's center of mass
+# • Values are in cm/second based on the pose estimation calibration
+# • This simple threshold approach works well for clear movement vs. stationary distinction
+# • For more nuanced locomotion analysis, consider multiple body part velocities
+#
+# FEATURE ALTERNATIVES
+# --------------------
+# Alternative features you might use for locomotion detection:
+# 
+# Using individual body part speeds:
+# - features/per_frame/point_speeds NOSE speed
+# - features/per_frame/point_speeds BASE_TAIL speed
+# 
+# Using segmentation-based centroid (if available):
+# - features/per_frame/shape_descriptor centroid_speed
+#
+# PARAMETER TUNING GUIDELINES
+# ---------------------------
+# • Lower threshold (e.g., 1.0): More sensitive, captures subtle movements
+# • Higher threshold (e.g., 5.0): More selective, only clear locomotion
+# • Longer min_bout (e.g., 30): Requires sustained movement episodes
+# • Shorter min_bout (e.g., 5): Allows brief movement bursts
+#
+# VALIDATION SUGGESTIONS
+# ----------------------
+# 1. Visually inspect classified bouts against video
+# 2. Check that stationary periods (grooming, sniffing) are excluded
+# 3. Verify that brief pauses during exploration don't fragment bouts excessively
+# 4. Compare total locomotion time against expected activity levels for your paradigm

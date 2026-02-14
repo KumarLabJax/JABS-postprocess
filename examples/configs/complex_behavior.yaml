@@ -1,0 +1,183 @@
+# ================================================================================
+# COMPLEX MULTI-CONDITION BEHAVIOR CLASSIFICATION
+# ================================================================================
+# This configuration demonstrates advanced heuristic classification using multiple
+# conditions, logical operators, and mathematical expressions to detect a complex
+# behavioral state: "Active Exploration in Arena Center"
+# 
+# Purpose: Detect when a mouse is actively exploring the central area of the arena
+#          while maintaining moderate locomotion and avoiding wall-oriented behaviors
+# Use Case: Open field anxiety studies, spatial preference analysis
+# Difficulty: Advanced
+# ================================================================================
+
+# BEHAVIOR DEFINITION
+# -------------------
+behavior: 
+  Active Center Exploration
+
+# POST-PROCESSING PARAMETERS
+# ---------------------------
+# More stringent parameters for complex behaviors to ensure reliability
+interpolate:
+  3    # Shorter interpolation window for precise behavioral episodes
+
+stitch:
+  10   # Longer stitch window to maintain exploration episodes despite brief pauses
+
+min_bout:
+  45   # Longer minimum bout (1.5s at 30fps) ensures sustained exploration behavior
+
+# COMPLEX CLASSIFICATION RULE
+# ----------------------------
+# This demonstrates the use of nested logical operators and mathematical expressions
+# to create sophisticated behavioral definitions
+
+definition:
+  # Main logical structure: ALL conditions must be satisfied simultaneously
+  all:
+    # CONDITION 1: Mouse must be actively moving (moderate locomotion)
+    # ------------------------------------------------------------------
+    - all:
+        # Multiple body parts must show movement to avoid misclassification during grooming
+        - greater than:
+            - features/per_frame/point_speeds NOSE speed
+            - 1.5    # Nose moving > 1.5 cm/s indicates head movement/exploration
+        
+        - greater than:
+            - features/per_frame/centroid_velocity_mag centroid_velocity_mag  
+            - 2.0    # Overall body movement > 2.0 cm/s
+        
+        # But not moving too fast (exclude running/escape behaviors)
+        - less than:
+            - features/per_frame/centroid_velocity_mag centroid_velocity_mag
+            - 15.0   # Less than 15 cm/s excludes rapid locomotion
+    
+    # CONDITION 2: Mouse must be in the center area of the arena
+    # ----------------------------------------------------------
+    - all:
+        # Distance from each wall must be greater than 30% of arena dimension
+        # This creates a "center zone" by excluding the periphery
+        
+        - greater than:
+            - wall_distances/wall_0
+            # Mathematical expression: multiply average wall length by 0.3
+            - multiply:
+                - avg_wall_length
+                - 0.3
+        
+        - greater than:
+            - wall_distances/wall_1
+            - multiply:
+                - avg_wall_length
+                - 0.3
+        
+        - greater than:
+            - wall_distances/wall_2
+            - multiply:
+                - avg_wall_length
+                - 0.3
+        
+        - greater than:
+            - wall_distances/wall_3
+            - multiply:
+                - avg_wall_length
+                - 0.3
+    
+    # CONDITION 3: Mouse should not be exhibiting wall-oriented behaviors
+    # -------------------------------------------------------------------
+    - any:
+        # This condition uses "any" to exclude mice that are wall-following
+        # At least one of these conditions must be true (mouse not hugging walls)
+        
+        # Head not oriented toward walls (excludes wall-sniffing/following)
+        - greater than:
+            - abs:
+                # Use absolute value of difference between head angle and wall orientation
+                - subtract:
+                    - features/per_frame/head_angle head_angle
+                    - features/per_frame/wall_angle_0 wall_0_angle
+            - 30.0    # Head angle differs from wall by more than 30 degrees
+        
+        # Alternative: mouse has moved significantly from wall in recent frames
+        # (This would require windowed features - commented out for this example)
+        # - greater than:
+        #     - features/windowed/distance_from_wall/mean mean_wall_distance_5frame
+        #     - divide:
+        #         - avg_wall_length  
+        #         - 4    # Must be >25% of arena dimension from walls on average
+
+    # CONDITION 4: Behavioral state consistency check
+    # ------------------------------------------------
+    # Ensure the mouse isn't in a conflicting behavioral state
+    - all:
+        # Not freezing (multiple body parts must be moving)
+        - any:
+            - greater than:
+                - features/per_frame/point_speeds BASE_NECK speed
+                - 1.0
+            - greater than:
+                - features/per_frame/point_speeds BASE_TAIL speed
+                - 1.0
+        
+        # Not engaged in intensive self-grooming
+        # (High paw speed combined with low centroid speed typically indicates grooming)
+        - or:
+            - greater than:
+                - features/per_frame/centroid_velocity_mag centroid_velocity_mag
+                - 3.0    # If moving moderately fast, not grooming
+            - less than:
+                - features/per_frame/point_speeds FRONT_PAW_R speed
+                - 8.0    # Or if right paw not moving rapidly
+
+# ADVANCED FEATURES DEMONSTRATED
+# ===============================
+# 1. Nested logical operators (all/any within all)
+# 2. Mathematical expressions (multiply, subtract, abs)
+# 3. Multi-feature combinations
+# 4. Spatial reasoning (center detection via wall distances)
+# 5. Behavioral exclusion logic (avoiding conflicting states)
+# 6. Threshold tuning for specific behavioral contexts
+
+# PARAMETER INTERPRETATION
+# ========================
+# Mathematical Operations:
+# • multiply: [avg_wall_length, 0.3] = 30% of average arena dimension
+# • subtract: [head_angle, wall_angle] = angular difference between head and wall
+# • abs: absolute value ensures positive angle differences
+#
+# Logical Operations:
+# • all: Every sub-condition must be True
+# • any: At least one sub-condition must be True  
+# • or: Alternative conditions (logical OR)
+
+# BIOLOGICAL RATIONALE
+# ====================
+# This configuration captures the behavioral phenotype of:
+# 1. Active exploration (moderate movement speeds)
+# 2. Central arena preference (anxiety indicator in open field tests)
+# 3. Non-thigmotactic behavior (not wall-following/hugging)
+# 4. Engaged locomotion (not freezing or self-grooming)
+
+# TUNING GUIDELINES
+# =================
+# Speed Thresholds:
+# • Increase lower bounds to be more selective for active exploration
+# • Decrease upper bounds to exclude more vigorous locomotion
+#
+# Spatial Thresholds:  
+# • Increase wall distance multiplier (0.3 → 0.4) for smaller center zone
+# • Decrease multiplier (0.3 → 0.2) for larger center zone
+#
+# Temporal Parameters:
+# • Increase min_bout for longer sustained episodes
+# • Adjust stitch to handle natural pauses in exploration
+
+# VALIDATION CHECKLIST
+# ====================
+# 1. Verify center zone size matches experimental design
+# 2. Confirm speed ranges capture intended locomotion types
+# 3. Check that wall-oriented behaviors are properly excluded
+# 4. Validate against manual scoring of exploration episodes
+# 5. Test sensitivity to different arena geometries
+# 6. Ensure robust performance across different animal sizes/strains
