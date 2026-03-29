@@ -703,6 +703,76 @@ class TestBoutTableBoutsToBinsWeightedStats:
             "Expected last prediction to end at frame 840"
         )
 
+    def test_bouts_to_bins_latency_to_first_prediction_nonzero_offset(self):
+        """Test that latency_to_first_prediction is experiment-relative, not video-local."""
+        # Arrange: Two videos at different times so the function uses real timestamps.
+        # Video 1 at 00:00 (offset 0), Video 2 at 00:05 (offset 9000 frames at 30fps).
+        # The earliest behavior bout's adjusted_start should be the result.
+        # Video 2 bout: adjusted_start = 9000 + 200 = 9200
+        # Video 1 bout: adjusted_start = 0 + 500 = 500
+        # In the 0-10 min bin, first prediction = min(500, 9200, 9800) = 500
+        # In the second scenario below, we check that a later-video bout reports correctly.
+        data = pd.DataFrame(
+            {
+                "animal_idx": [0, 0, 0],
+                "video_name": ["vid1", "vid2", "vid2"],
+                "start": [500, 200, 800],
+                "duration": [50, 30, 40],
+                "is_behavior": [1, 1, 1],
+                "exp_prefix": ["exp1"] * 3,
+                "time": [
+                    "1970-01-01 00:00:00",
+                    "1970-01-01 00:05:00",
+                    "1970-01-01 00:05:00",
+                ],
+            }
+        )
+
+        # Act — use 5-min bins so vid2 bouts land in the second bin
+        result = BoutTable.bouts_to_bins(data, bin_size_minutes=5, fps=30)
+
+        # Assert — bin 0 (0-5min) has only vid1 bout: adjusted_start = 500
+        assert result.iloc[0]["latency_to_first_prediction"] == 500, (
+            "Expected first prediction at experiment-relative frame 500"
+        )
+        # bin 1 (5-10min) has vid2 bouts: adjusted_start = 9000+200=9200 and 9000+800=9800
+        assert result.iloc[1]["latency_to_first_prediction"] == 9200, (
+            "Expected first prediction at experiment-relative frame 9200"
+        )
+
+    def test_bouts_to_bins_latency_to_last_prediction_nonzero_offset(self):
+        """Test that latency_to_last_prediction is experiment-relative, not video-local."""
+        # Arrange: Two videos at different times.
+        # Video 1 at 00:00, Video 2 at 00:05 (offset 9000 frames at 30fps).
+        # In the 5-10min bin, last prediction end = max(adjusted_end) = 9000+800+40 = 9840
+        data = pd.DataFrame(
+            {
+                "animal_idx": [0, 0, 0],
+                "video_name": ["vid1", "vid2", "vid2"],
+                "start": [200, 500, 800],
+                "duration": [30, 50, 40],
+                "is_behavior": [1, 1, 1],
+                "exp_prefix": ["exp1"] * 3,
+                "time": [
+                    "1970-01-01 00:00:00",
+                    "1970-01-01 00:05:00",
+                    "1970-01-01 00:05:00",
+                ],
+            }
+        )
+
+        # Act — use 5-min bins
+        result = BoutTable.bouts_to_bins(data, bin_size_minutes=5, fps=30)
+
+        # Assert — bin 0 (0-5min): vid1 bout ends at 200+30=230
+        assert result.iloc[0]["latency_to_last_prediction"] == 230, (
+            "Expected last prediction to end at experiment-relative frame 230"
+        )
+        # bin 1 (5-10min): vid2 bouts end at 9000+500+50=9550 and 9000+800+40=9840
+        assert result.iloc[1]["latency_to_last_prediction"] == 9840, (
+            "Expected last prediction to end at experiment-relative frame 9840"
+        )
+
     def test_bouts_to_bins_no_behavior_bouts(self):
         """Test handling when there are no behavior bouts in a bin."""
         # Arrange: Only non-behavior events

@@ -1080,10 +1080,8 @@ class BoutTable(Table):
                     / behavior_bins["percent_bout"].values,
                     weights=behavior_bins["percent_bout"].values,
                 )
-                results["latency_to_first_prediction"] = behavior_bins["start"].min()
-                results["latency_to_last_prediction"] = (
-                    behavior_bins["start"] + behavior_bins["duration"]
-                ).max()
+                results["latency_to_first_prediction"] = behavior_bins["adjusted_start"].min()
+                results["latency_to_last_prediction"] = behavior_bins["adjusted_end"].max()
 
                 # Variance requires more than one effective bout
                 if len(behavior_bins) > 1:
