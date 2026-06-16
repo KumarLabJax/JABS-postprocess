@@ -454,7 +454,7 @@ def generate_iou_scan(
     # Aggregate over animals
     performance_df = (
         performance_df.groupby(["stitch", "filter", "threshold"])[["tp", "fn", "fp"]]
-        .apply(np.sum)
+        .sum()
         .reset_index()
     )
     # Re-calculate PR/RE/F1
