@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-POSE_REGEX_STR = "_pose_est_v([2-6]).h5"
+POSE_REGEX_STR = "_pose_est_v([2-8]).h5"
 PREDICTION_REGEX_STR = "_behavior.h5"
 FEATURE_REGEX_STR = "features.h5"
 DATE_REGEX_STR = "[0-9]{4}-[0-9]{2}-[0-9]{2}"
